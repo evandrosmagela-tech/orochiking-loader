@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OROCHIKING - Painel (Loader + Licença)
 // @namespace    orochiking.painel
-// @version      27.0
+// @version      27.1
 // @description  Valida a licença (e-mail da compra + nick) no servidor OROCHIKING e só então recebe e carrega o Painel.
 // @match        https://*/game.php*
 // @match        http://*/game.php*
@@ -133,7 +133,10 @@
     urlPainel: 'https://painelorochikingtw.lovable.app/api/public/painel',
     // só se a rota pedir chave pública (anon key); vazio = não manda
     anonKey: 'sb_publishable_HxALwSJFN_CEs-L69sxBWg_xpnhZ4IR',
-    versaoLoader: '27.0',
+    versaoLoader: '27.1',
+    // reaproveita o painel já recebido por até X minutos (não baixa 1 MB a cada F5; a licença continua sendo
+    // reconferida pelo próprio painel a cada 10–15 min). Atualização nova do painel chega em até X minutos.
+    cacheMinutos: 20,
     // se o servidor cair, usa a última cópia válida por até X horas (nunca além do vencimento)
     folgaOfflineHoras: 12
   };
@@ -215,6 +218,8 @@
     W.__ORK_REVALIDAR_LICENCA__ = function (cb) {
       chamar(pedido(true), function (j, erro) {
         if (erro || !j) { cb(true); return; } // falha de rede NÃO derruba ninguém
+        if (!j.ok && (j.motivo === 'limite' || j.motivo === 'erro')) { cb(true); return; } // servidor ocupado também não
+        if (!j.ok) { try { GM_deleteValue('ork_copia'); } catch (e) {} } // licença caiu: não reaproveita mais a cópia
         cb(!!j.ok);
       });
     };
@@ -232,7 +237,7 @@
 
   /* ---------- cópia de segurança (servidor fora do ar) ---------- */
   function guardarCopia(codigo, j) {
-    try { GM_setValue('ork_copia', JSON.stringify({ quando: Date.now(), nick: j.nick, expiraMs: j.expira_ms || 0, expira: j.expira, codigo: codigo })); } catch (e) {}
+    try { GM_setValue('ork_copia', JSON.stringify({ quando: Date.now(), nick: j.nick || nickAtual(), email: emailSalvo(), expiraMs: j.expira_ms || 0, expira: j.expira, codigo: codigo })); } catch (e) {}
   }
   function usarCopia(motivo) {
     var c = null; try { c = JSON.parse(GM_getValue('ork_copia', 'null')); } catch (e) {}
@@ -260,7 +265,16 @@
       return;
     }
     if (!emailSalvo()) { pedirEmail(''); return; }
+    // v27.1: cópia recente deste nick + e-mail → abre na hora, sem pedir de novo ao servidor
+    var cp = null; try { cp = JSON.parse(GM_getValue('ork_copia', 'null')); } catch (e) {}
+    if (cp && cp.codigo && cp.nick && cp.nick.toLowerCase() === nick.toLowerCase() && cp.email === emailSalvo() &&
+        Date.now() - cp.quando < CONFIG.cacheMinutos * 60000 && (!cp.expiraMs || Date.now() < cp.expiraMs)) {
+      aguardarTela(function () { injetar(cp.codigo, { nick: cp.nick, expira: cp.expira }); });
+      return;
+    }
     chamar(pedido(false), function (j, erro) {
+      // limite de tentativas ou erro do servidor NÃO é licença negada: usa a última cópia válida
+      if (j && !j.ok && (j.motivo === 'limite' || j.motivo === 'erro')) { erro = j.mensagem || j.motivo; j = null; }
       if (erro || !j) {
         if (!usarCopia(erro)) { caixa('Não foi possível checar sua licença agora (' + (erro || 'erro') + '). Recarregue a página em instantes.'); }
         return;
