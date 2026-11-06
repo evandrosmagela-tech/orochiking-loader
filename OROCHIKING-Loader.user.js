@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OROCHIKING - Painel (Loader + Licença)
 // @namespace    orochiking.painel
-// @version      27.1
+// @version      28.0
 // @description  Valida a licença (e-mail da compra + nick) no servidor OROCHIKING e só então recebe e carrega o Painel.
 // @match        https://*/game.php*
 // @match        http://*/game.php*
@@ -107,9 +107,10 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @grant        unsafeWindow
+// @connect      xnjawwjjrrxjwpdkprhj.supabase.co
+// @connect      supabase.co
 // @connect      painelorochikingtw.lovable.app
 // @connect      lovable.app
-// @connect      supabase.co
 // @updateURL    https://raw.githubusercontent.com/evandrosmagela-tech/orochiking-loader/main/OROCHIKING-Loader.user.js
 // @downloadURL  https://raw.githubusercontent.com/evandrosmagela-tech/orochiking-loader/main/OROCHIKING-Loader.user.js
 // ==/UserScript==
@@ -118,22 +119,21 @@
   'use strict';
 
   /* ============================================================
-     OROCHIKING — LOADER v27 (licença no SERVIDOR)
+     OROCHIKING — LOADER v28 (licença no SERVIDOR — Supabase)
 
-     O que mudou em relação ao v26:
-       • Não existe mais licenses.json público: quem decide se a licença
-         vale é o servidor (função "painel" no Lovable Cloud).
-       • O código do painel NÃO fica mais público: o servidor só entrega
-         o painel pra quem tem licença válida (e-mail da compra + nick).
-       • O e-mail é pedido UMA vez e fica guardado no Tampermonkey.
-       • A validade é conferida pelo relógio do servidor.
+     O que mudou em relação ao v27:
+       • Servidor de licenças migrado do Lovable para o Supabase (grátis).
+         Agora a função "painel" roda em
+         https://xnjawwjjrrxjwpdkprhj.supabase.co/functions/v1/painel
+       • Resto igual: valida e-mail da compra + nick, entrega o painel só
+         pra quem tem licença válida, e-mail pedido uma vez, cópia offline.
   ============================================================ */
   var CONFIG = {
-    // endereço do servidor de licenças (rota pública do site)
-    urlPainel: 'https://painelorochikingtw.lovable.app/api/public/painel',
-    // só se a rota pedir chave pública (anon key); vazio = não manda
-    anonKey: 'sb_publishable_HxALwSJFN_CEs-L69sxBWg_xpnhZ4IR',
-    versaoLoader: '27.1',
+    // endereço do servidor de licenças (Edge Function "painel" no Supabase)
+    urlPainel: 'https://xnjawwjjrrxjwpdkprhj.supabase.co/functions/v1/painel',
+    // chave pública (anon/publishable) do projeto Supabase
+    anonKey: 'sb_publishable_eRRHxPp8zL-7bS8rF1FWWg_g6R3JrJZ',
+    versaoLoader: '28.0',
     // reaproveita o painel já recebido por até X minutos (não baixa 1 MB a cada F5; a licença continua sendo
     // reconferida pelo próprio painel a cada 10–15 min). Atualização nova do painel chega em até X minutos.
     cacheMinutos: 20,
