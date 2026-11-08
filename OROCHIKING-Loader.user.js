@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OROCHIKING - Painel (Loader + Licença)
 // @namespace    orochiking.painel
-// @version      28.0
+// @version      30.0
 // @description  Valida a licença (e-mail da compra + nick) no servidor OROCHIKING e só então recebe e carrega o Painel.
 // @match        https://*/game.php*
 // @match        http://*/game.php*
@@ -101,7 +101,7 @@
 // @include      *://voynaplemyon.com/*
 // @include      *://*.tribalwars2.com/*
 // @include      *://tribalwars2.com/*
-// @run-at       document-idle
+// @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -119,6 +119,25 @@
   'use strict';
 
   /* ============================================================
+     v29: MODO VÍDEO (privacidade) — esconde a página IMEDIATAMENTE
+     (document-start), ANTES de pintar o nick, se o Modo Vídeo do painel
+     estiver ligado. O painel revela a página já mascarada. Isso mata o
+     "flash" do nick ao recarregar. Se o Modo Vídeo estiver desligado,
+     NADA muda — este bloco nem roda.
+  ============================================================ */
+  try {
+    var _LS = (typeof unsafeWindow !== 'undefined' && unsafeWindow.localStorage) ? unsafeWindow.localStorage : window.localStorage;
+    var _pc = JSON.parse(_LS.getItem('ork_priv_cfg') || 'null');
+    if (_pc && _pc.ativo) {
+      var _hs = document.createElement('style'); _hs.id = 'ork-priv-hide';
+      _hs.textContent = 'body > *:not(#ork-painel):not(#ork-painel-bolinha):not(#ork-modal-priv):not(#ork-ld){visibility:hidden!important}';
+      (document.head || document.documentElement).appendChild(_hs);
+      // trava de segurança: revela em no máximo 6s mesmo se o painel não carregar
+      setTimeout(function () { try { var s = document.getElementById('ork-priv-hide'); if (s) { s.remove(); } } catch (e) {} }, 6000);
+    }
+  } catch (e) {}
+
+  /* ============================================================
      OROCHIKING — LOADER v28 (licença no SERVIDOR — Supabase)
 
      O que mudou em relação ao v27:
@@ -133,7 +152,7 @@
     urlPainel: 'https://xnjawwjjrrxjwpdkprhj.supabase.co/functions/v1/painel',
     // chave pública (anon/publishable) do projeto Supabase
     anonKey: 'sb_publishable_eRRHxPp8zL-7bS8rF1FWWg_g6R3JrJZ',
-    versaoLoader: '28.0',
+    versaoLoader: '30.0',
     // reaproveita o painel já recebido por até X minutos (não baixa 1 MB a cada F5; a licença continua sendo
     // reconferida pelo próprio painel a cada 10–15 min). Atualização nova do painel chega em até X minutos.
     cacheMinutos: 20,
@@ -251,6 +270,59 @@
     return false;
   }
 
+  /* ============================================================
+     v30: MASCARADOR LEVE (Modo Vídeo) — roda no DOMContentLoaded, bem
+     antes do painel grande carregar. Mascara o nick/tribo e REVELA a
+     página na hora, pra não ficar escondida 2-3s esperando o painel.
+     O painel depois mantém a máscara (navegação/ajax). Desligado = no-op.
+  ============================================================ */
+  function _privMascararLoader() {
+    try {
+      var LS = (typeof unsafeWindow !== 'undefined' && unsafeWindow.localStorage) ? unsafeWindow.localStorage : window.localStorage;
+      var cfg = null; try { cfg = JSON.parse(LS.getItem('ork_priv_cfg') || 'null'); } catch (e) {}
+      if (!cfg || !cfg.ativo) { var s0 = document.getElementById('ork-priv-hide'); if (s0) { s0.remove(); } return; }
+      var alias = cfg.alias || 'OROCHIKING';
+      var alvos = [];
+      if (cfg.meuNick) { var n = nickAtual(); if (n) { alvos.push(n); } }
+      if (cfg.minhaTribo) {
+        try {
+          var a = document.querySelector('#menu_row2 a[href*="screen=info_ally"], #menu_row a[href*="screen=info_ally"]');
+          if (a && a.textContent && a.textContent.trim()) { var t = a.textContent.trim().replace(/[\[\]]/g, ''); alvos.push(t); alvos.push('[' + t + ']'); }
+        } catch (e) {}
+      }
+      alvos = alvos.filter(function (s) { return s && s.length >= 2; });
+      var esc = function (s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+      if (alvos.length && document.body) {
+        var regs = alvos.map(function (a) { return new RegExp(esc(a), 'gi'); });
+        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+          acceptNode: function (node) {
+            var p = node.parentNode; if (!p) { return NodeFilter.FILTER_REJECT; }
+            var tag = p.nodeName;
+            if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'OPTION') { return NodeFilter.FILTER_REJECT; }
+            try { if (p.closest && p.closest('#ork-painel, #ork-painel-bolinha, #ork-modal-priv, #ork-ld')) { return NodeFilter.FILTER_REJECT; } } catch (e) {}
+            if (!node.nodeValue || !node.nodeValue.trim()) { return NodeFilter.FILTER_REJECT; }
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        });
+        var node, mudar = [];
+        while ((node = walker.nextNode())) { var v = node.nodeValue, nv = v; for (var i = 0; i < regs.length; i++) { nv = nv.replace(regs[i], alias); } if (nv !== v) { mudar.push([node, nv]); } }
+        mudar.forEach(function (x) { x[0].nodeValue = x[1]; });
+      }
+      if ((cfg.outros || cfg.aldeias) && document.body) {
+        if (!document.getElementById('ork-priv-css')) { var sc = document.createElement('style'); sc.id = 'ork-priv-css'; sc.textContent = '.ork-priv-blur{filter:blur(5px)!important}'; (document.head || document.documentElement).appendChild(sc); }
+      }
+      if (cfg.outros && document.body) {
+        var meu = (nickAtual() || '').toLowerCase(), al = (alias || '').toLowerCase();
+        document.querySelectorAll('a[href*="screen=info_player"]').forEach(function (a) { var t = (a.textContent || '').trim().toLowerCase(); if (t && t !== meu && t !== al) { a.classList.add('ork-priv-blur'); } });
+        document.querySelectorAll('a[href*="screen=info_ally"]').forEach(function (a) { var t = (a.textContent || '').trim().toLowerCase(); if (t !== al && t !== ('[' + al + ']')) { a.classList.add('ork-priv-blur'); } });
+      }
+      if (cfg.aldeias && document.body) {
+        document.querySelectorAll('a[href*="screen=info_village"]').forEach(function (a) { if (a.getAttribute('data-ork-aldeia')) { return; } var txt = a.textContent || ''; var m = txt.match(/\(\s*\d{1,3}\s*\|\s*\d{1,3}\s*\)/); var novo = 'Aldeia' + (m ? ' ' + m[0] : ''); if (novo !== txt) { a.textContent = novo; a.setAttribute('data-ork-aldeia', '1'); } });
+      }
+    } catch (e) {}
+    try { var s = document.getElementById('ork-priv-hide'); if (s) { s.remove(); } } catch (e) {}
+  }
+
   /* ---------- início ---------- */
   function iniciar() {
     var nick = nickAtual();
@@ -291,5 +363,13 @@
     });
   }
 
-  iniciar();
+  // v29/30: rodamos em document-start, então o DOM pode não existir ainda.
+  // Assim que o DOM fica pronto: PRIMEIRO mascara+revela (rápido, sem esperar o painel),
+  // DEPOIS inicia a licença/injeção do painel. iniciar() usa body/head, por isso espera o DOM.
+  function _arrancar() { try { _privMascararLoader(); } catch (e) {} iniciar(); }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _arrancar);
+  } else {
+    _arrancar();
+  }
 })();
