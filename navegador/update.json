@@ -1,0 +1,12 @@
+{
+  "version": "1.8.0",
+  "notes": [
+    "Atualização automática: o navegador agora se atualiza sozinho (confere a cada 20 min).",
+    "Aviso de CAPTCHA piscando só na conta onde aparece.",
+    "Ajuda completa no botão ❓ (ou F1)."
+  ],
+  "bundle": "app.json",
+  "sha256": "a8e377abaff58a67bbe4c7394a6cf155506044983a2bc19273ad07bcea8e6318",
+  "electron": "33",
+  "fullUrl": "https://painelorochikingtw.lovable.app/"
+}
