@@ -1,11 +1,10 @@
 {
-  "version": "1.10.0",
+  "version": "1.11.0",
   "notes": [
-    "🪞 Espelhamento: a conta ⭐ Oficial comanda e as contas 🪞 Espelha repetem as funções do painel.",
-    "Ataques espelhados só com a caixinha marcada no Ataque Mass / Agendador."
+    "🌍 Logar todas: escolha o mundo (ex: br145) e as contas entram sozinhas, uma de cada vez."
   ],
   "bundle": "app.json",
-  "sha256": "98f04c9f5b60357fdf7471692374186819bd3bfae803923b4791965536e1db32",
+  "sha256": "dd0b2853f118769723b627eb65fdd28d09797062a81cea673f0140b7eb1c079f",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
