@@ -1,12 +1,11 @@
 {
-  "version": "1.8.0",
+  "version": "1.10.0",
   "notes": [
-    "Atualização automática: o navegador agora se atualiza sozinho (confere a cada 20 min).",
-    "Aviso de CAPTCHA piscando só na conta onde aparece.",
-    "Ajuda completa no botão ❓ (ou F1)."
+    "🪞 Espelhamento: a conta ⭐ Oficial comanda e as contas 🪞 Espelha repetem as funções do painel.",
+    "Ataques espelhados só com a caixinha marcada no Ataque Mass / Agendador."
   ],
   "bundle": "app.json",
-  "sha256": "a8e377abaff58a67bbe4c7394a6cf155506044983a2bc19273ad07bcea8e6318",
+  "sha256": "98f04c9f5b60357fdf7471692374186819bd3bfae803923b4791965536e1db32",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
