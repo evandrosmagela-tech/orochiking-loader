@@ -1,10 +1,10 @@
 {
-  "version": "1.11.0",
+  "version": "1.12.0",
   "notes": [
-    "🌍 Logar todas: escolha o mundo (ex: br145) e as contas entram sozinhas, uma de cada vez."
+    "Reconexão automática: se a internet ou o proxy cair, as abas tentam de novo sozinhas e voltam quando a conexão volta."
   ],
   "bundle": "app.json",
-  "sha256": "dd0b2853f118769723b627eb65fdd28d09797062a81cea673f0140b7eb1c079f",
+  "sha256": "25a6dc6e7c5ecc351506e74eac6b03a328ab920becb06c5fb32ac78353946cd7",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
