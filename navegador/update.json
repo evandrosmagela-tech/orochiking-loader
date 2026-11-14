@@ -1,10 +1,10 @@
 {
-  "version": "1.13.0",
+  "version": "1.14.0",
   "notes": [
-    "🧩 Extensões do Chrome: instale pela Chrome Web Store, por arquivo .crx ou por pasta (ativas em todas as contas)."
+    "Corrigido: ferramentas do painel que abrem janelinha (Incomings, Coletar Perfil, Ranking...) não dão mais 'popup bloqueado'."
   ],
   "bundle": "app.json",
-  "sha256": "7f6717dff6f3754283fd95feafb6e2c14a5466842def95776882ff50302b57c7",
+  "sha256": "73504eb4127cc7e5b28cc9bd89300bdce7ff3943891bd883d831a60528756807",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
