@@ -1,10 +1,10 @@
 {
-  "version": "1.12.0",
+  "version": "1.13.0",
   "notes": [
-    "Reconexão automática: se a internet ou o proxy cair, as abas tentam de novo sozinhas e voltam quando a conexão volta."
+    "🧩 Extensões do Chrome: instale pela Chrome Web Store, por arquivo .crx ou por pasta (ativas em todas as contas)."
   ],
   "bundle": "app.json",
-  "sha256": "25a6dc6e7c5ecc351506e74eac6b03a328ab920becb06c5fb32ac78353946cd7",
+  "sha256": "7f6717dff6f3754283fd95feafb6e2c14a5466842def95776882ff50302b57c7",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
