@@ -1,10 +1,10 @@
 {
-  "version": "1.14.0",
+  "version": "1.15.0",
   "notes": [
-    "Corrigido: ferramentas do painel que abrem janelinha (Incomings, Coletar Perfil, Ranking...) não dão mais 'popup bloqueado'."
+    "Corrigido: o aviso de CAPTCHA (aba piscando em vermelho) agora aparece também quando o captcha abre na janela do painel."
   ],
   "bundle": "app.json",
-  "sha256": "73504eb4127cc7e5b28cc9bd89300bdce7ff3943891bd883d831a60528756807",
+  "sha256": "cfa8afb6b35c73f4f4ff574a9e51858f641be109b4bacaf009b9807e33752ae4",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
