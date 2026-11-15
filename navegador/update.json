@@ -1,10 +1,10 @@
 {
-  "version": "1.15.0",
+  "version": "1.16.0",
   "notes": [
-    "Corrigido: o aviso de CAPTCHA (aba piscando em vermelho) agora aparece também quando o captcha abre na janela do painel."
+    "Servidor de licenças fora do ar não tira mais você do navegador: quem já entrou neste computador continua abrindo normalmente (até 7 dias sem confirmar)."
   ],
   "bundle": "app.json",
-  "sha256": "cfa8afb6b35c73f4f4ff574a9e51858f641be109b4bacaf009b9807e33752ae4",
+  "sha256": "0965aadb207397418769b10b464e52bb060b75a676e06facd36673ff212b0af7",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
