@@ -280,7 +280,7 @@
      rodando — sem depender de adivinhar se o GitHub já propagou.
      No Console (F12) digite:  __ORK_VERSAO__
   ============================================================ */
-  window.__ORK_VERSAO__ = 238;
+  window.__ORK_VERSAO__ = 239;
   try { localStorage.removeItem('Alvos_Muralha'); } catch (e) {} // v83: lista antiga do Farm Hard que só crescia
 
   /* ============================================================
@@ -298,6 +298,14 @@
      lista abaixo (o mais recente primeiro), com id/data/itens. Só isso.
   ============================================================ */
   var ORK_NOVIDADES = [
+    {
+      id: '2026-11-15-v239',
+      data: '15/11/2026',
+      titulo: '🏛️ Nobres em Massa',
+      itens: [
+        '🏛️ Nova ferramenta <b>Nobres em Massa</b>: forma nobres de uma vez nas suas aldeias com Academia — em todas, perto de jogador(es), perto de coordenada(s), num continente (opcional: perto de um jogador), na borda do mapa ou na borda da sua conta. Escolha quantos por aldeia e o máximo de aldeias; o <b>Ver aldeias</b> mostra a lista antes.'
+      ]
+    },
     {
       id: '2026-11-15-v238',
       data: '15/11/2026',
@@ -15317,6 +15325,188 @@
       nobRodarCiclo();
     });
   }
+  /* ============================================================
+     v239 — 🏛️ NOBRES EM MASSA: forma nobres nas SUAS aldeias que você escolher pelo filtro
+     (todas, perto de jogador, perto de coordenada, continente, borda do mapa, borda da conta).
+     Usa o mesmo motor do Noblar (lê a Academia e clica em formar), com pausa sorteada.
+  ============================================================ */
+  var NM_KEY = 'ork_nobmassa_cfg', nmRodando = false, nmParar = false;
+  function nmLer() { try { return JSON.parse(localStorage.getItem(NM_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function nmGravar(c) { try { localStorage.setItem(NM_KEY, JSON.stringify(c)); } catch (e) {} }
+  function nmLog(t) {
+    var el = document.getElementById('nm-log'); if (!el) { return; }
+    var d = document.createElement('div'); d.textContent = new Date().toLocaleTimeString().slice(0, 8) + '  ' + t;
+    el.insertBefore(d, el.firstChild);
+  }
+  function nmStatus(t) { var el = document.getElementById('nm-status'); if (el) { el.textContent = t; } }
+  // aldeias de jogadores pelo nick (dump do mundo) -> [{x,y}]
+  async function nmAldeiasDeNicks(texto) {
+    var nicks = String(texto || '').split(/[,;\n]/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!nicks.length) { throw new Error('digite pelo menos um nick.'); }
+    var r = await amxResolverNicks(nicks);
+    var coords = (r && r.coords) || [];
+    if (!coords.length) { throw new Error('não achei aldeias desses nicks' + (r && r.naoAchados && r.naoAchados.length ? ' (não encontrado: ' + r.naoAchados.join(', ') + ')' : '') + '.'); }
+    if (r.naoAchados && r.naoAchados.length) { nmLog('⚠️ nick não encontrado: ' + r.naoAchados.join(', ')); }
+    return coords.map(function (c) { var p = c.split('|'); return { x: +p[0], y: +p[1] }; });
+  }
+  function nmCoordsDoTexto(texto) {
+    var out = []; String(texto || '').replace(/(\d{1,3})\|(\d{1,3})/g, function (m, x, y) { out.push({ x: +x, y: +y }); return m; });
+    return out;
+  }
+  // escolhe e ordena as aldeias conforme o filtro
+  async function nmSelecionar(cfg) {
+    nmStatus('lendo suas aldeias...');
+    var minhas = await nobAldeias('0');
+    nmStatus('procurando academias...');
+    var ed = await balDadosEdificios('0');
+    var cands = minhas.filter(function (a) { return (ed.get(a.coord + '_snob') || 0) >= 1; });
+    var semAcad = minhas.length - cands.length;
+    var modo = cfg.modo || 'todas', raio = Math.max(0, parseFloat(cfg.raio) || 0), refs = null, motivo = '';
+    if (modo === 'jogador' || (modo === 'continente' && String(cfg.nicks || '').trim())) {
+      nmStatus('lendo o mapa do mundo...');
+      refs = await nmAldeiasDeNicks(cfg.nicks);
+    } else if (modo === 'coord') {
+      refs = nmCoordsDoTexto(cfg.coords);
+      if (!refs.length) { throw new Error('digite pelo menos uma coordenada (ex.: 500|500).'); }
+    }
+    if (modo === 'continente') {
+      var conts = nobLerConts(cfg.conts);
+      if (!conts.length) { throw new Error('digite o(s) continente(s) (ex.: K55 K45).'); }
+      cands = cands.filter(function (a) { return nobNoCont(a, conts); });
+      motivo = 'no(s) continente(s) ' + conts.map(function (k) { return k.nome; }).join(', ');
+    }
+    if (refs) {
+      cands.forEach(function (a) { a._d = nobDistRef(a, refs); });
+      if (raio > 0) { cands = cands.filter(function (a) { return a._d <= raio; }); }
+      cands.sort(function (a, b) { return a._d - b._d; });
+      motivo += (motivo ? ', ' : '') + (modo === 'coord' ? 'mais perto da(s) coordenada(s)' : 'mais perto do(s) jogador(es)') + (raio > 0 ? ' (até ' + raio + ' campos)' : '');
+    } else if (modo === 'borda_mapa') {
+      cands.forEach(function (a) { a._d = Math.sqrt(Math.pow(a.x - 500, 2) + Math.pow(a.y - 500, 2)); });
+      cands.sort(function (a, b) { return b._d - a._d; });
+      motivo = 'na borda do mapa (mais longe do centro 500|500)';
+    } else if (modo === 'borda_conta') {
+      var cx = 0, cy = 0; minhas.forEach(function (a) { cx += a.x; cy += a.y; }); cx /= Math.max(1, minhas.length); cy /= Math.max(1, minhas.length);
+      cands.forEach(function (a) { a._d = Math.sqrt(Math.pow(a.x - cx, 2) + Math.pow(a.y - cy, 2)); });
+      cands.sort(function (a, b) { return b._d - a._d; });
+      motivo = 'na borda da sua conta (mais longe do centro das suas aldeias, ' + Math.round(cx) + '|' + Math.round(cy) + ')';
+    } else if (!motivo) { motivo = 'em todas as aldeias com Academia'; }
+    var lim = Math.max(0, parseInt(cfg.maxAldeias, 10) || 0);
+    if (lim > 0) { cands = cands.slice(0, lim); }
+    return { lista: cands, semAcad: semAcad, motivo: motivo };
+  }
+  async function nmFormar(cfg, sel) {
+    var N = Math.max(1, parseInt(cfg.porAldeia, 10) || 1), formados = 0, semBotao = 0, cheias = 0, restantes = null;
+    for (var i = 0; i < sel.lista.length && !nmParar; i++) {
+      var a = sel.lista[i];
+      while (window.__ORK_CAPTCHA_BLOQUEADO__ && !nmParar) { nmStatus('captcha — esperando resolver'); await gerEsperar(gerEntre(3000, 5000)); }
+      if (nmParar) { break; }
+      if (restantes === 0) { nmLog('⛔ o limite de nobres da conta acabou (precisa cunhar mais moedas).'); break; }
+      nmStatus('academia ' + (i + 1) + '/' + sel.lista.length + ' — ' + a.coord);
+      var d = await balGetDoc('/game.php?village=' + a.id + '&screen=snob');
+      var ac = nobLerAcademia(d);
+      if (ac.restantes != null) { restantes = ac.restantes; }
+      var tem = ac.total + ac.fila;
+      if (tem >= N) { cheias++; continue; }
+      var feitosAqui = 0;
+      for (var k = tem; k < N && !nmParar; k++) {
+        if (!ac.link) { semBotao++; nmLog('🏛️ ' + a.coord + ': sem botão de formar (moedas/recurso/fazenda?)' + (feitosAqui ? ' — formou ' + feitosAqui : '') + '.'); break; }
+        if (restantes === 0) { break; }
+        await gerEsperar(gerEntre(Math.round((parseFloat(cfg.pausaMin) || 0.7) * 1000), Math.round(Math.max(parseFloat(cfg.pausaMin) || 0.7, parseFloat(cfg.pausaMax) || 1.5) * 1000)));
+        var url = ac.link.replace(/&amp;/g, '&');
+        if (!/[?&]h=/.test(url)) { url += '&h=' + encodeURIComponent(nobCsrf()); }
+        var r = await fetch(url, { credentials: 'include' });
+        var ac2 = nobLerAcademia(new DOMParser().parseFromString(await r.text(), 'text/html'));
+        if (ac2.fila > ac.fila) { formados++; feitosAqui++; if (restantes != null) { restantes--; } }
+        else { semBotao++; nmLog('🏛️ ' + a.coord + ': o jogo não aceitou formar (moedas/recurso/fazenda?).'); break; }
+        ac = ac2;
+      }
+      if (feitosAqui) { nmLog('🏛️ ' + a.coord + ': +' + feitosAqui + ' nobre(s) na fila' + (a._d != null ? ' · ' + a._d.toFixed(1) + ' campos' : '') + '.'); }
+      await gerEsperar(gerEntre(600, 1300));
+    }
+    return { formados: formados, semBotao: semBotao, cheias: cheias };
+  }
+  function nmAbrirModal() {
+    if (document.getElementById('ork-modal-nm')) { return; }
+    var c = nmLer();
+    var inp = 'background:#111;border:1px solid rgba(255,255,255,.14);color:#ececec;padding:6px 8px;border-radius:7px;font-size:12px;box-sizing:border-box;font-family:inherit';
+    var rot = 'display:block;font-size:10.5px;color:#aaa;margin:8px 0 3px;font-weight:700';
+    var ov = document.createElement('div'); ov.id = 'ork-modal-nm';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2147483500;display:flex;align-items:center;justify-content:center;font-family:"Segoe UI",Arial,sans-serif';
+    ov.innerHTML = '<div style="width:440px;max-width:94vw;max-height:92vh;overflow:auto;background:linear-gradient(160deg,#1a1a1a,#050505);border:1px solid #3a3a3a;border-radius:12px;padding:14px 16px;color:#eee;box-shadow:0 18px 40px rgba(0,0,0,.7)">' +
+      '<div style="display:flex;align-items:center;gap:8px"><b style="color:#ffd84d;font-size:15px">🏛️ Nobres em Massa</b><span style="flex:1"></span><span id="nm-x" style="cursor:pointer;color:#888;font-weight:800;font-size:16px">&times;</span></div>' +
+      '<div style="font-size:11px;color:#999;margin-top:2px">Forma nobres de uma vez nas aldeias que você escolher. Só aldeias com Academia entram.</div>' +
+      '<label style="' + rot + '">Onde formar</label><select id="nm-modo" style="width:100%;' + inp + '">' +
+        '<option value="todas">Todas as aldeias com Academia</option>' +
+        '<option value="jogador">Perto de jogador(es)</option>' +
+        '<option value="coord">Perto de coordenada(s)</option>' +
+        '<option value="continente">Continente(s) (opcional: perto de jogador)</option>' +
+        '<option value="borda_mapa">Borda do mapa (mais longe do centro 500|500)</option>' +
+        '<option value="borda_conta">Borda da minha conta (aldeias mais de fora)</option>' +
+      '</select>' +
+      '<div id="nm-f-nicks"><label style="' + rot + '">Nick(s) do jogador <span style="color:#666;font-weight:400">(separe por vírgula)</span></label><input id="nm-nicks" style="width:100%;' + inp + '" value="' + gerHtml(c.nicks || '') + '" placeholder="ex.: Fulano, Ciclano"></div>' +
+      '<div id="nm-f-coords"><label style="' + rot + '">Coordenada(s)</label><input id="nm-coords" style="width:100%;' + inp + '" value="' + gerHtml(c.coords || '') + '" placeholder="ex.: 512|487 520|490"></div>' +
+      '<div id="nm-f-conts"><label style="' + rot + '">Continente(s)</label><input id="nm-conts" style="width:100%;' + inp + '" value="' + gerHtml(c.conts || '') + '" placeholder="ex.: K55 K45"></div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<div style="flex:1" id="nm-f-raio"><label style="' + rot + '" title="Só aldeias até essa distância do jogador/coordenada. 0 = sem limite (usa a ordem: mais perto primeiro).">Até X campos <span style="color:#666;font-weight:400">(0 = sem limite)</span></label><input id="nm-raio" type="number" min="0" style="width:100%;' + inp + '" value="' + (c.raio != null ? c.raio : 0) + '"></div>' +
+        '<div style="flex:1"><label style="' + rot + '" title="Usa só as primeiras X aldeias da lista (na ordem do filtro). 0 = todas.">Máx. de aldeias <span style="color:#666;font-weight:400">(0 = todas)</span></label><input id="nm-max" type="number" min="0" style="width:100%;' + inp + '" value="' + (c.maxAldeias != null ? c.maxAldeias : 0) + '"></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<div style="flex:1"><label style="' + rot + '" title="Cada aldeia fica com até esse número de nobres (os que já estão em casa e na fila contam).">Nobres por aldeia</label><input id="nm-por" type="number" min="1" max="20" style="width:100%;' + inp + '" value="' + (c.porAldeia || 1) + '"></div>' +
+        '<div style="flex:1"><label style="' + rot + '" title="Pausa sorteada entre um clique de formar e outro, em segundos.">Pausa (s)</label><div style="display:flex;gap:4px"><input id="nm-pmin" type="number" step="0.1" min="0.3" style="width:50%;' + inp + '" value="' + (c.pausaMin || 0.7) + '"><input id="nm-pmax" type="number" step="0.1" min="0.3" style="width:50%;' + inp + '" value="' + (c.pausaMax || 1.5) + '"></div></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:12px">' +
+        '<button id="nm-ver" style="flex:1;background:#232323;color:#FFC400;border:1px solid #3a3a3a;border-radius:8px;padding:9px 0;font-weight:800;cursor:pointer;font-size:12px">🔎 Ver aldeias</button>' +
+        '<button id="nm-ir" style="flex:1.3;background:linear-gradient(100deg,#FFB800,#FFDD55);color:#141200;border:none;border-radius:8px;padding:9px 0;font-weight:800;cursor:pointer;font-size:12px">🏛️ Formar nobres</button>' +
+        '<button id="nm-parar" style="flex:.8;background:#2a1010;color:#ff8a8a;border:1px solid #4a1c1c;border-radius:8px;padding:9px 0;font-weight:800;cursor:pointer;font-size:12px">Parar</button>' +
+      '</div>' +
+      '<div id="nm-status" style="margin-top:8px;font-size:11.5px;color:#e8c84a;min-height:15px"></div>' +
+      '<div id="nm-lista" style="display:none;margin-top:6px;max-height:140px;overflow:auto;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:8px;padding:6px 8px;font:11px Consolas,monospace;color:#cfcfcf"></div>' +
+      '<div id="nm-log" style="margin-top:6px;max-height:170px;overflow:auto;font-size:11px;color:#bbb;line-height:1.5"></div>' +
+    '</div>';
+    document.body.appendChild(ov);
+    var q = function (s) { return ov.querySelector(s); };
+    q('#nm-modo').value = c.modo || 'todas';
+    function mostrarCampos() {
+      var m = q('#nm-modo').value;
+      q('#nm-f-nicks').style.display = (m === 'jogador' || m === 'continente') ? '' : 'none';
+      q('#nm-f-coords').style.display = m === 'coord' ? '' : 'none';
+      q('#nm-f-conts').style.display = m === 'continente' ? '' : 'none';
+      q('#nm-f-raio').style.display = (m === 'jogador' || m === 'coord' || m === 'continente') ? '' : 'none';
+      var lb = q('#nm-f-nicks label'); if (lb) { lb.innerHTML = 'Nick(s) do jogador <span style="color:#666;font-weight:400">' + (m === 'continente' ? '(opcional — ordena pela mais perto dele)' : '(separe por vírgula)') + '</span>'; }
+    }
+    mostrarCampos(); q('#nm-modo').addEventListener('change', mostrarCampos);
+    function lerCfg() {
+      var n = { modo: q('#nm-modo').value, nicks: q('#nm-nicks').value, coords: q('#nm-coords').value, conts: q('#nm-conts').value, raio: q('#nm-raio').value,
+        maxAldeias: q('#nm-max').value, porAldeia: q('#nm-por').value, pausaMin: q('#nm-pmin').value, pausaMax: q('#nm-pmax').value };
+      nmGravar(n); return n;
+    }
+    function fechar() { if (nmRodando && !confirm('Os nobres ainda estão sendo formados. Fechar para tudo?')) { return; } nmParar = true; ov.remove(); }
+    q('#nm-x').addEventListener('click', fechar);
+    ov.addEventListener('click', function (e) { if (e.target === ov) { fechar(); } });
+    q('#nm-parar').addEventListener('click', function () { if (nmRodando) { nmParar = true; nmStatus('parando...'); } });
+    async function rodar(soVer) {
+      if (nmRodando) { return; }
+      nmRodando = true; nmParar = false;
+      try {
+        var cfg = lerCfg();
+        var sel = await nmSelecionar(cfg);
+        var lista = q('#nm-lista');
+        lista.style.display = '';
+        lista.innerHTML = sel.lista.length ? sel.lista.map(function (a, i) { return (i + 1) + '. ' + a.coord + (a._d != null ? '  · ' + a._d.toFixed(1) + ' campos' : '') + '  · ' + (a.tropas && a.tropas.snob || 0) + ' nobre(s) em casa'; }).join('<br>') : '<span style="color:#ff8a8a">nenhuma aldeia passou no filtro</span>';
+        nmStatus(sel.lista.length + ' aldeia(s) ' + sel.motivo + (sel.semAcad ? ' · ' + sel.semAcad + ' sem Academia ficaram de fora' : '') + '.');
+        if (soVer || !sel.lista.length) { return; }
+        var r = await nmFormar(cfg, sel);
+        nmStatus((nmParar ? '⏹ parado — ' : '✔ pronto — ') + r.formados + ' nobre(s) colocado(s) na fila' + (r.cheias ? ' · ' + r.cheias + ' já tinham ' + cfg.porAldeia : '') + (r.semBotao ? ' · ' + r.semBotao + ' sem moeda/recurso/fazenda' : '') + '.');
+        nmLog('fim: ' + r.formados + ' nobre(s) formado(s).');
+      } catch (e) { nmStatus('erro: ' + ((e && e.message) || e)); }
+      finally { nmRodando = false; }
+    }
+    q('#nm-ver').addEventListener('click', function () { rodar(true); });
+    q('#nm-ir').addEventListener('click', function () { rodar(false); });
+  }
+  function checaNobMassa() { return !!(window.game_data && game_data.village && game_data.village.id); }
+  function rodarNobMassa() { nmAbrirModal(); }
+
   function checaNobre() { return !!(window.game_data && game_data.village && game_data.village.id); }
   function rodarNobre() { nobAbrirModal(); }
 
@@ -22171,6 +22361,16 @@
       destino: null
     },
     {
+      id: 'nobmassa',
+      nome: 'Nobres em Massa',
+      abrev: 'Nobres em Massa',
+      icone: '🏛️',
+      dica: 'Forma nobres de uma vez nas SUAS aldeias com Academia que você escolher: todas, perto de jogador(es), perto de coordenada(s), num continente (opcional: perto de um jogador), na borda do mapa ou na borda da sua conta. Você define quantos nobres cada aldeia fica e o máximo de aldeias. "Ver aldeias" mostra a lista antes de formar.',
+      checar: checaNobMassa,
+      rodar: rodarNobMassa,
+      destino: null
+    },
+    {
       id: 'pesqmassa',
       nome: 'Pesquisar em Massa',
       abrev: 'Pesquisar em Massa',
@@ -22244,7 +22444,7 @@
 
   var ORK_SECOES = [
     ['🌾 Farm', ['farmar', 'farmdormindo', 'keypress', 'coletorhard', 'coletorfarm']],
-    ['⚔️ Ataque e nobres', ['ataque', 'desviar', 'nobrebb', 'noblaplayer', 'etiquetador', 'snipe', 'agendador', 'defender']],
+    ['⚔️ Ataque e nobres', ['ataque', 'desviar', 'nobrebb', 'noblaplayer', 'nobmassa', 'etiquetador', 'snipe', 'agendador', 'defender']],
     ['🗺️ Coleta', ['coleta', 'barbaras', 'perfil', 'coletarank', 'separador', 'ocultar']],
     ['🏰 Conta', ['gerente', 'recrutador', 'consind', 'mercadopp', 'pesqmassa', 'construcao', 'recacademia', 'balanceador', 'cunhar', 'rename', 'privacidade', 'cancelar']],
     ['⚡ Automações Speeds', ['n0n1', 'n9', 'auto247']]
