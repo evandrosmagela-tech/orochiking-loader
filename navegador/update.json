@@ -1,10 +1,10 @@
 {
-  "version": "1.16.0",
+  "version": "1.17.0",
   "notes": [
-    "Servidor de licenças fora do ar não tira mais você do navegador: quem já entrou neste computador continua abrindo normalmente (até 7 dias sem confirmar)."
+    "Atualizações agora vêm do servidor novo (mais rápido e sem limite) e a licença é conferida de 1 em 1 hora."
   ],
   "bundle": "app.json",
-  "sha256": "0965aadb207397418769b10b464e52bb060b75a676e06facd36673ff212b0af7",
+  "sha256": "569c27a609fb22f28507fb9f5c93b683482a3804648fa2813223a6b6e07f7338",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
