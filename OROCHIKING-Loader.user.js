@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OROCHIKING - Painel (Loader + Licença)
 // @namespace    orochiking.painel
-// @version      32.0
+// @version      33.0
 // @description  Valida a licença (e-mail da compra + nick) no servidor OROCHIKING e só então abre o Painel (baixado do Cloudflare, criptografado).
 // @match        https://*/game.php*
 // @match        http://*/game.php*
@@ -150,12 +150,11 @@
          licença confirmada por até 7 dias (nunca além do vencimento).
   ============================================================ */
   var CONFIG = {
-    // servidor de licenças (Edge Function "painel" no Supabase)
-    urlPainel: 'https://xnjawwjjrrxjwpdkprhj.supabase.co/functions/v1/painel',
-    anonKey: 'sb_publishable_eRRHxPp8zL-7bS8rF1FWWg_g6R3JrJZ',
+    // servidor de licenças (Cloudflare Worker: confere a lista e entrega a chave só pra quem tem licença)
+    urlPainel: 'https://orochiking-painel.evandrosmagela.workers.dev/licenca',
     // onde fica o painel criptografado (Cloudflare)
     urlArquivos: 'https://orochiking-painel.evandrosmagela.workers.dev/',
-    versaoLoader: '32.0',
+    versaoLoader: '33.0',
     // confere a licença no servidor no máximo a cada X minutos (por conta, todas as abas juntas)
     licencaMinutos: 60,
     // confere se saiu versão nova do painel a cada X minutos (arquivo de poucos bytes, grátis)
@@ -165,7 +164,7 @@
     // MODO EMERGÊNCIA — só quando o servidor de licenças está fora e não há licença guardada:
     // abre o painel aberto do GitHub (se ele existir lá). Depois que o servidor voltar e você
     // apagar o arquivo do GitHub, pode trocar pra false.
-    emergenciaGithub: true,
+    emergenciaGithub: false,
     urlPainelGithub: 'https://raw.githubusercontent.com/evandrosmagela-tech/orochiking-loader/main/planejadororochiking.js'
   };
 
@@ -183,16 +182,14 @@
   /* ---------- chamada ao servidor de licenças ---------- */
   function chamar(corpo, cb) {
     GM_xmlhttpRequest({
-      method: 'POST',
-      url: CONFIG.urlPainel,
-      headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.anonKey, 'Authorization': 'Bearer ' + CONFIG.anonKey },
-      data: JSON.stringify(corpo),
+      method: 'GET',
+      url: CONFIG.urlPainel + '?email=' + encodeURIComponent(String(corpo.email || '')),
       timeout: 20000,
       onload: function (res) {
         var j = null; try { j = JSON.parse(res.responseText); } catch (e) {}
         if (!j) { cb(null, 'resposta inválida do servidor (HTTP ' + res.status + ')'); return; }
-        // servidor bloqueado/fora (ex.: cota, HTTP 402/5xx) NÃO é licença negada
-        if (typeof j.ok !== 'boolean' || res.status === 402 || res.status >= 500) { cb(null, 'servidor de licenças indisponível (HTTP ' + res.status + ')'); return; }
+        // servidor fora (5xx) NÃO é licença negada
+        if (typeof j.ok !== 'boolean' || res.status >= 500) { cb(null, 'servidor de licenças indisponível (HTTP ' + res.status + ')'); return; }
         if (!j.ok && (j.motivo === 'limite' || j.motivo === 'erro')) { cb(null, j.mensagem || j.motivo); return; }
         cb(j, null);
       },
