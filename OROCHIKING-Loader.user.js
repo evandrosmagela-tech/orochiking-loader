@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OROCHIKING - Painel (Loader + Licença)
 // @namespace    orochiking.painel
-// @version      33.0
+// @version      34.0
 // @description  Valida a licença (e-mail da compra + nick) no servidor OROCHIKING e só então abre o Painel (baixado do Cloudflare, criptografado).
 // @match        https://*/game.php*
 // @match        http://*/game.php*
@@ -154,7 +154,7 @@
     urlPainel: 'https://orochiking-painel.evandrosmagela.workers.dev/licenca',
     // onde fica o painel criptografado (Cloudflare)
     urlArquivos: 'https://orochiking-painel.evandrosmagela.workers.dev/',
-    versaoLoader: '33.0',
+    versaoLoader: '34.0',
     // confere a licença no servidor no máximo a cada X minutos (por conta, todas as abas juntas)
     licencaMinutos: 60,
     // confere se saiu versão nova do painel a cada X minutos (arquivo de poucos bytes, grátis)
@@ -183,7 +183,7 @@
   function chamar(corpo, cb) {
     GM_xmlhttpRequest({
       method: 'GET',
-      url: CONFIG.urlPainel + '?email=' + encodeURIComponent(String(corpo.email || '')),
+      url: CONFIG.urlPainel + '?email=' + encodeURIComponent(String(corpo.email || '')) + '&nick=' + encodeURIComponent(nickAtual()) + '&mundo=' + encodeURIComponent(mundoAtual()),
       timeout: 20000,
       onload: function (res) {
         var j = null; try { j = JSON.parse(res.responseText); } catch (e) {}
