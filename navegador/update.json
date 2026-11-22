@@ -1,10 +1,10 @@
 {
-  "version": "1.18.3",
+  "version": "1.18.4",
   "notes": [
-    "Contas: linhas compactas, todas as colunas alinhadas, botão ▶ Acessar inteiro e modal mais estreito."
+    "Login e licença agora passam pelo novo servidor (Cloudflare)."
   ],
   "bundle": "app.json",
-  "sha256": "450e667dc9b55a6e4b0cd6b70522776ef621cd90fced8cf6c635e1bac87ea4c5",
+  "sha256": "e9afd9d2c1ee02b54b555a581fdd7df9e78cbc5141a5fa9db37d66f15a2c44af",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
