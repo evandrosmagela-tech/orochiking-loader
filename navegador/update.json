@@ -1,12 +1,11 @@
 {
-  "version": "1.18.0",
+  "version": "1.18.2",
   "notes": [
-    "Modal Contas: busca e botão ▶ Acessar em cada conta (● Aberta, em verde, quando a conta já está aberta).",
-    "Barra superior: 🛒 Comprar proxies e 🧰 Ferramentas ▾ (Contas, Logar todas, Espelho, Scripts, Extensões, Proxies e Ajuda ficam dentro do menu).",
-    "Barra de contas quebra em linhas em vez de rolar pro lado."
+    "Popups de scripts (coletar coordenadas, perfil, ranking) agora abrem na mesma conta e proxy da aba que os abriu.",
+    "Trocar de aba ou abrir popup não derruba mais a conexão das outras abas da mesma conta."
   ],
   "bundle": "app.json",
-  "sha256": "bca2892ed324e29c0178537171fe5d08c11842b7a6a62100cb2cd1ab9dba5001",
+  "sha256": "8dc33fde7b75abd0ac11afe72713e54aa1e55529a10d90b7003d2b3b0db309d0",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
