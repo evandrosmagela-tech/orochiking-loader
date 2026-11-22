@@ -1,0 +1,12 @@
+{
+  "name": "orochi-king-navegador",
+  "productName": "Orochi King Navegador",
+  "version": "1.18.4",
+  "main": "boot.js",
+  "devDependencies": {
+    "electron": "^33.2.1"
+  },
+  "allowScripts": {
+    "electron": true
+  }
+}
