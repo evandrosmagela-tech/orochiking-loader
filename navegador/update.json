@@ -1,10 +1,12 @@
 {
-  "version": "1.17.0",
+  "version": "1.18.0",
   "notes": [
-    "Atualizações agora vêm do servidor novo (mais rápido e sem limite) e a licença é conferida de 1 em 1 hora."
+    "Modal Contas: busca e botão ▶ Acessar em cada conta (● Aberta, em verde, quando a conta já está aberta).",
+    "Barra superior: 🛒 Comprar proxies e 🧰 Ferramentas ▾ (Contas, Logar todas, Espelho, Scripts, Extensões, Proxies e Ajuda ficam dentro do menu).",
+    "Barra de contas quebra em linhas em vez de rolar pro lado."
   ],
   "bundle": "app.json",
-  "sha256": "569c27a609fb22f28507fb9f5c93b683482a3804648fa2813223a6b6e07f7338",
+  "sha256": "bca2892ed324e29c0178537171fe5d08c11842b7a6a62100cb2cd1ab9dba5001",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
