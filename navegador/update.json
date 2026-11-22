@@ -1,11 +1,10 @@
 {
-  "version": "1.18.2",
+  "version": "1.18.3",
   "notes": [
-    "Popups de scripts (coletar coordenadas, perfil, ranking) agora abrem na mesma conta e proxy da aba que os abriu.",
-    "Trocar de aba ou abrir popup não derruba mais a conexão das outras abas da mesma conta."
+    "Contas: linhas compactas, todas as colunas alinhadas, botão ▶ Acessar inteiro e modal mais estreito."
   ],
   "bundle": "app.json",
-  "sha256": "8dc33fde7b75abd0ac11afe72713e54aa1e55529a10d90b7003d2b3b0db309d0",
+  "sha256": "450e667dc9b55a6e4b0cd6b70522776ef621cd90fced8cf6c635e1bac87ea4c5",
   "electron": "33",
   "fullUrl": "https://painelorochikingtw.lovable.app/"
 }
