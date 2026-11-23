@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OROCHIKING - Painel Unificado
 // @namespace    orochiking.painel
-// @version      239.0
+// @version      252.0
 // @description  Painel único (preto/dourado) OROCHIKING. Abre pela bolinha no canto, navega e ativa cada script no lugar certo (com confirmação de 1 clique pra não cair no bloqueio de popup), com monitor de captcha (alerta visual + sonoro contínuo).
 // @match        https://*/game.php*
 // @match        http://*/game.php*
@@ -280,7 +280,7 @@
      rodando — sem depender de adivinhar se o GitHub já propagou.
      No Console (F12) digite:  __ORK_VERSAO__
   ============================================================ */
-  window.__ORK_VERSAO__ = 239;
+  window.__ORK_VERSAO__ = 252;
   try { localStorage.removeItem('Alvos_Muralha'); } catch (e) {} // v83: lista antiga do Farm Hard que só crescia
 
   /* ============================================================
@@ -297,7 +297,170 @@
      PRA ANUNCIAR UMA ATUALIZAÇÃO NOVA: adicione um objeto no TOPO da
      lista abaixo (o mais recente primeiro), com id/data/itens. Só isso.
   ============================================================ */
+  // v251: bolinha do loop do Atacar em massa — fixa, acima das outras, mostra enviando/aguardando/parado.
+  // Clique abre o Combinado. Com o loop ligado, o Combinado abre sozinho na hora da próxima volta.
+  (function orkBolinhaAtaqueGlobal() {
+    var noCombinado = function () { return /screen=overview_villages/.test(location.search) && /mode=combined/.test(location.search); };
+    var irEmSeg = null, irPara = 0, chaveAtual = '';
+    var lerEstado = function () {
+      var fila = null, loop = false, est = {};
+      try { fila = JSON.parse(localStorage.getItem('ork_amx_dem_fila') || 'null'); } catch (e) {}
+      try { var c = JSON.parse(localStorage.getItem('ork_loop_ataque_config') || 'null'); loop = !!(c && c.ativo); } catch (e) {}
+      try { est = JSON.parse(localStorage.getItem('ork_amx_estado') || '{}') || {}; } catch (e) {}
+      return { fila: (fila && fila.length) ? fila : null, loop: loop, est: est, prox: parseInt(localStorage.getItem('ork_amx_prox') || '0', 10) || 0, url: localStorage.getItem('ork_amx_url') || '' };
+    };
+    var rotulo = function (e) {
+      var st = (e.est && e.est.st) || '';
+      if (e.fila && (st === 'enviando' || !st)) { return { txt: 'ENVIANDO', cor: '#ffd84d' }; }
+      if (st === 'enviando') { return { txt: 'ENVIANDO', cor: '#ffd84d' }; }
+      if (st === 'captcha') { return { txt: 'CAPTCHA', cor: '#ff9f43' }; }
+      if (st === 'parado') { return { txt: 'PARADO', cor: '#b8b8b8' }; }
+      if (st === 'concluido') { return { txt: 'CONCLUÍDO', cor: '#b8b8b8' }; }
+      if (e.loop) { return { txt: 'AGUARDA', cor: '#7ed17e' }; }
+      return { txt: '', cor: '#b8b8b8' };
+    };
+    var desenhar = function () {
+      if (!document.body) { return; }
+      var e = lerEstado();
+      var recente = e.est.t && (Date.now() - e.est.t) < 300000;
+      var mostrar = e.loop || e.fila || (recente && ['enviando', 'captcha', 'parado', 'concluido'].indexOf(e.est.st) !== -1);
+      var el = document.getElementById('ork-amx-bolinha');
+      if (!mostrar) { if (el) { el.remove(); } if (irEmSeg) { clearTimeout(irEmSeg); irEmSeg = null; } chaveAtual = ''; return; }
+      var r = rotulo(e);
+      var rest = e.prox > Date.now() ? e.prox - Date.now() : 0;
+      var cd = (rest > 0 && r.txt !== 'ENVIANDO') ? Math.floor(rest / 60000) + ':' + ('0' + Math.floor((rest % 60000) / 1000)).slice(-2) : '';
+      if (!el) {
+        el = document.createElement('div'); el.id = 'ork-amx-bolinha';
+        el.style.cssText = 'position:fixed;left:10px;bottom:96px;z-index:2147483647;width:62px;height:62px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff6b0,#e8ac0a 55%,#8a6d00);color:#141200;border:2px solid #141200;box-shadow:0 4px 12px rgba(0,0,0,.55);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;font:800 10px "Segoe UI",Arial,sans-serif;user-select:none';
+        el.addEventListener('click', function () { var u = localStorage.getItem('ork_amx_url'); if (u) { location.href = u; } });
+        document.body.appendChild(el);
+      }
+      var chave = r.txt + '|' + (e.fila ? e.fila.length : 0) + '|' + e.loop;
+      if (chave !== chaveAtual) {
+        chaveAtual = chave;
+        el.style.borderColor = r.cor;
+        el.innerHTML = '<span style="font-size:14px;line-height:1">🔁</span><span class="ork-amx-txt" style="font-size:9px;line-height:1.1;margin-top:1px">' + (r.txt || '') + '</span><span class="ork-amx-cd" style="font-size:9px;line-height:1.1"></span>';
+      }
+      el.querySelector('.ork-amx-cd').textContent = cd;
+      el.title = 'Atacar em massa — ' + (r.txt || 'loop') + (e.fila ? ' · demolidor com ' + e.fila.length + ' prédio(s)' : '') +
+        (rest > 0 ? ' · próxima volta às ' + new Date(e.prox).toLocaleTimeString('pt-BR').slice(0, 5) : '') + '. Clique pra abrir o Combinado.';
+      if ((e.fila || e.loop) && !noCombinado() && e.url) {
+        var atraso = e.fila ? 20000 : (rest > 0 ? rest : 20000);
+        var alvo = Date.now() + atraso;
+        if (!irEmSeg || Math.abs(alvo - irPara) > 1500) {
+          if (irEmSeg) { clearTimeout(irEmSeg); }
+          irPara = alvo;
+          irEmSeg = setTimeout(function () { irEmSeg = null; var u = localStorage.getItem('ork_amx_url'); var st = lerEstado(); if (u && (st.fila || st.loop)) { location.href = u; } }, atraso);
+        }
+      } else if (irEmSeg) { clearTimeout(irEmSeg); irEmSeg = null; }
+    };
+    setInterval(desenhar, 1000);
+    desenhar();
+  })();
+
   var ORK_NOVIDADES = [
+    {
+      id: '2026-11-22-v252',
+      data: '22/11/2026',
+      titulo: '🔁 Loop e demolidor salvos na fila, igual ao agendador',
+      itens: [
+        '🔁 O loop e o demolidor guardam os ataques na fila salva, como o agendador: não perdem comando ao recarregar ou trocar de tela.',
+        '🟡 A bolinha do sincronizador foi separada da bolinha do loop, por isso as duas não somem mais ao atualizar.'
+      ]
+    },
+    {
+      id: '2026-11-22-v251',
+      data: '22/11/2026',
+      titulo: '🔁 Bolinha do loop fixa, acima das outras, com status',
+      itens: [
+        '🔁 A bolinha do loop não some mais ao trocar o estado. Fica fixa e acima das outras bolinhas.',
+        '🟡 Mostra se está ENVIANDO, AGUARDANDO a próxima volta (com a contagem), CAPTCHA, PARADO ou CONCLUÍDO.'
+      ]
+    },
+    {
+      id: '2026-11-22-v250',
+      data: '22/11/2026',
+      titulo: '⚔️ Atacar em massa: loop com hora certa e bolinha 🔁',
+      itens: [
+        '☑️ "N ataques por alvo" agora é uma caixinha. Desligada = 1 ataque por alvo, como sempre.',
+        '🔁 O loop guarda a hora da próxima volta. Ao recarregar a página, a volta sai no mesmo horário, sem reiniciar a contagem.',
+        '🧭 Com o loop ligado, o Combinado abre sozinho na hora da próxima volta.',
+        '🟡 Bolinha 🔁 no canto com a contagem até a próxima volta. Clique nela para abrir o Combinado.'
+      ]
+    },
+    {
+      id: '2026-11-22-v249',
+      data: '22/11/2026',
+      titulo: '⚔️ Atacar em massa: loop volta a repetir depois de recarregar',
+      itens: [
+        '🔁 O loop do Atacar em massa era perdido ao recarregar a página e não voltava a repetir. Agora, ao carregar o Combinado com o loop ligado, ele reagenda a próxima volta.',
+        '🧭 Com o loop ligado (mesmo sem demolidor), a bolinha aparece em outras telas e o Combinado abre sozinho, porque o envio só roda lá.'
+      ]
+    },
+    {
+      id: '2026-11-22-v248',
+      data: '22/11/2026',
+      titulo: '⚔️ Atacar em massa: bolinha, próxima volta e retomada de qualquer tela',
+      itens: [
+        '⚔️ Aparece uma bolinha do Atacar em massa em qualquer tela do jogo: fila do demolidor e a hora da próxima volta do loop.',
+        '🔁 Se o demolidor estiver salvo e você estiver em outra tela, o script abre o Combinado sozinho (depois de 20 s) e retoma de lá.',
+        '✅ Ao terminar a fila, ela é apagada, então recarregar a página não reenvia o último prédio.'
+      ]
+    },
+    {
+      id: '2026-11-22-v247',
+      data: '22/11/2026',
+      titulo: '⚔️ Atacar em massa: retomada salva a quantidade de ataques',
+      itens: [
+        '🔢 A quantidade de ataques e a prioridade ("Usar primeiro") agora ficam salvas. Ao retomar o Demolidor sozinho, ele usa a mesma quantidade (ex.: 96), e não a página inteira.',
+        '📢 Ao retomar, o aviso mostra quantos ataques vai mandar.'
+      ]
+    },
+    {
+      id: '2026-11-22-v246',
+      data: '22/11/2026',
+      titulo: '🧱 Demolir: continua sozinho depois de recarregar a página',
+      itens: [
+        '🧱 O Demolir de Muralhas agora retoma sozinho ao carregar a página, se estava ligado. Se outra aba estiver segurando, tenta de novo a cada 10 s.',
+        '🔓 A trava do Demolir é solta ao sair da página, então a página nova não fica presa esperando.',
+        '🟡 Aparece uma bolinha 🧱 no canto inferior esquerdo com o status (clique pra abrir o painel do Demolir).'
+      ]
+    },
+    {
+      id: '2026-11-22-v245',
+      data: '22/11/2026',
+      titulo: '⚔️ Atacar em massa: opções do Demolidor, lotes e só nobre',
+      itens: [
+        '🎯 Atacar em massa: modo "N ataques por alvo", igual ao Demolidor. Cada alvo recebe até N ataques das aldeias mais perto, sem repetir aldeia na mesma volta.',
+        '👑 Nova opção "Só nobre (1 por aldeia)" e "+1 nobre por aldeia" (junto com as tropas).',
+        '📦 Nova opção "Lotes": envia N aldeias por vez e espera a pausa antes do próximo lote.',
+        '💥 Catapultas em prédio aleatório também no Atacar em massa.',
+        '⏹ Demolidor do Atacar em massa: botão Cancelar, e a fila fica salva (se a página recarregar, ele continua sozinho).',
+        '🏛️ Recursos pra Academia: agora pode mandar pra aldeia de outro jogador da tribo. Informe o espaço livre do armazém dela e a coordenada.',
+        '🔀 N0/N1, N9 e N4: só uma automação roda por vez. Ao ligar uma, a outra para (o farm continua), e os comandos ficam espaçados.'
+      ]
+    },
+    {
+      id: '2026-11-22-v244',
+      data: '22/11/2026',
+      titulo: '🧱 Demolir de Muralhas: looping salvo, cancelar, catapultas aleatórias',
+      itens: [
+        '🧱 O Demolir de Muralhas continua sozinho depois que você recarrega a página, se ele estava ligado. Só uma aba roda o demolidor por vez.',
+        '🎯 Novo campo "Ataques por aldeia do oponente": quantas das suas aldeias mais perto mandam ataque em cada bárbara.',
+        '💥 Nova opção "Catapultas em alvo aleatório": as catapultas escolhem um prédio aleatório a cada ataque.',
+        '⏹ O botão Parar virou Cancelar.'
+      ]
+    },
+    {
+      id: '2026-11-20-v242',
+      data: '20/11/2026',
+      titulo: '🧱 Demolir de Muralhas (Farm) + correção do Atacar em massa',
+      itens: [
+        '🔎 Corrigido: o <b>Puxar coordenadas dos nicks</b> no Atacar/Apoiar juntava uma coordenada embaixo da outra e só o primeiro alvo saía. Agora as coordenadas ficam <b>lado a lado</b>, separadas por espaço.',
+        '🧱 Entrou o <b>Demolir de Muralhas</b> na seção 🌾 Farm. Você escolhe as tropas (ex.: 250 Bárbaro + 25 Ariete + 1 Explorador), o raio em volta de cada aldeia sua e o intervalo entre ciclos.',
+        '🎯 Os alvos são as bárbaras do Assistente de Saque dentro do raio. Cada alvo recebe 1 ataque por ciclo, sempre da aldeia sua mais perto.'
+      ]
+    },
     {
       id: '2026-11-15-v239',
       data: '15/11/2026',
@@ -336,6 +499,16 @@
       titulo: '⚔️ Sincronizar chegada: botão Cancelar',
       itens: [
         '✖ A bolinha <b>⚔️ Sincronizado</b> (que conta saíram/faltam) ganhou o botão <b>Cancelar</b>: cancela todos os ataques agendados que ainda não saíram (clique 2x pra confirmar).'
+      ]
+    },
+    {
+      id: '2026-11-18-v240',
+      data: '18/11/2026',
+      titulo: '⚡ Nova automação: N4 — Automático',
+      itens: [
+        '⚡ Entrou a <b>N4 — Automático</b> em Automações Speeds. Clique em <b>Setar Configuração N4</b> e depois em <b>Ligar</b>.',
+        '⚔️ O <b>Recrutador</b> agora escolhe entre <b>Ataque</b> e <b>Defesa</b>.',
+        '🔬 A <b>Pesquisa em Massa</b> roda a cada <b>3 min</b> (com a tela de Pesquisa aberta).'
       ]
     },
     {
@@ -2108,7 +2281,7 @@
     try {
       var r = JSON.parse(localStorage.getItem('ork_fh_reservar') || 'null');
       if (!r || !Array.isArray(r.ids) || !r.ids.length || Date.now() - (r.ts || 0) > 10 * 60000) { return null; }
-      if (typeof n9Ler === 'function' && !n9Ler().rodando) { return null; } // só no N9
+      if (typeof n9Ler === 'function' && !n9Ler().rodando && !(typeof n4Ler === 'function' && n4Ler().rodando)) { return null; } // só no N9
       return new Set(r.ids.map(String));
     } catch (e) { return null; }
   };
@@ -5185,6 +5358,34 @@
           );
         };
     
+        // v245: N ataques por alvo — cada alvo pega até N aldeias próximas; cada aldeia só manda 1x por volta
+        amxParearPorAlvo = function (N) {
+          var objAlvo = getAlvos(getParam("coordsRes"));
+          if (!objAlvo.coord.length) { objAlvo = getAlvos(getParam("coordsIds")); }
+          var usadas = {}, novas = [];
+          for (var j = 0; j < objAlvo.coord.length; j++) {
+            var t = objAlvo.coord[j].split("|");
+            var cand = [];
+            aldeias.forEach(function (a) {
+              if (usadas[a.id]) { return; }
+              var o = a.coord.split("|");
+              cand.push({ a: a, d: Math.sqrt(Math.pow(o[0] - t[0], 2) + Math.pow(o[1] - t[1], 2)) });
+            });
+            cand.sort(function (p, q) { return p.d - q.d; });
+            cand.slice(0, N).forEach(function (c) {
+              usadas[c.a.id] = true;
+              var na = new Aldeia(c.a.coord, c.a.id, 0, 0, {}, "");
+              na.alvoC = objAlvo.coord[j];
+              na.alvoId = objAlvo.id[j];
+              novas.push(na);
+            });
+          }
+          novas.forEach(function (a, i) { a.ordem = i; });
+          aldeias.splice(0, aldeias.length);
+          novas.forEach(function (a) { aldeias.push(a); });
+          return novas.length;
+        };
+
         removeVillage = function (id) {
           var len = aldeias.length;
           while (len && len--) {
@@ -5379,6 +5580,7 @@
         firstRequest = function () {
           try { if (window.orkNtCarregar && !(window.orkNtInfo || {}).pronto) { window.orkNtCarregar(); } } catch (e) {}
           var comando = $("#comando").val();
+          var amxO = window.amxLerOpcoes();
           var spear = getParam("spear"),
             sword = getParam("sword"),
             axe = getParam("axe"),
@@ -5460,6 +5662,12 @@
                         // servidor, que traria o building padrão do jogo, apagando essa escolha.
                       }
     
+                      // v245: catapulta em prédio aleatório (igual ao Demolidor da Demolir)
+                      if (amxO.catRand && parseInt(tropas.catapult) > 0) {
+                        var amxPredios = [];
+                        jQuery("select[name=catapult_target] option", data).each(function () { var v = $(this).attr("value"); if (v) { amxPredios.push(v); } });
+                        if (amxPredios.length) { var amxEsc = amxPredios[Math.floor(Math.random() * amxPredios.length)]; tropas.building = amxEsc; aldeia.building = amxEsc; }
+                      }
                       // Escolta das levas de nobre: prioriza cavalaria leve; se a aldeia não tiver
                       // cavalaria leve (ou não tiver o suficiente pra todas as levas extras), usa
                       // cavalaria pesada disponível no lugar — tanto na leva principal quanto nas extras.
@@ -5507,6 +5715,15 @@
                           });
                         }
                         tropas["string"] = pecas.join("&");
+                      }
+                      // v245: só nobre (1 por aldeia) ou +1 nobre junto com as tropas
+                      if (amxO.soNobre) {
+                        ["spear","sword","axe","archer","spy","light","marcher","heavy","ram","catapult","knight"].forEach(function (u) { tropas[u] = 0; });
+                        tropas.snob = snobN > 0 ? 1 : 0;
+                        tropas["string"] = "";
+                        delete tropas.building; aldeia.building = "";
+                      } else if (amxO.nobre1 && !tropas["string"]) {
+                        tropas.snob = snobN > 0 ? 1 : 0;
                       }
                       if (comando == "attack") {
                         tropas.attack = "l";
@@ -5581,6 +5798,7 @@
         };
         scheduleSend = function (aldeia, syncOn, targetTs) {
           var delayMs;
+          var persistirAmx = window.__AMX_PERSISTIR_LOOP__ === true; // v252: loop/demolidor salvam na fila como o agendador
           var durMsGeneric = durationToMs(aldeia.time);
           if (syncOn) {
             if (durMsGeneric == null) {
@@ -5615,6 +5833,8 @@
             // — é aqui que ganhamos o tempo que antes ficava esperando a leva inteira
             // confirmar e você clicar em Enviar.
             var now = Date.now();
+            var amxOL = window.amxLerOpcoes();
+            if (amxOL.lote > 0) { sendCursor = Math.max(sendCursor, now + Math.floor((aldeia.ordem || 0) / amxOL.lote) * amxOL.pausa * 1000); }
             sendCursor = Math.max(sendCursor, now);
             delayMs = sendCursor - now + (aldeia.retryOffsetMs || 0);
             // v134: Freio NT — trem de nobres sai sozinho, com ~1,2s até o próximo comando
@@ -5626,7 +5846,7 @@
             startCountdown(aldeia.rowIndex, Date.now() + delayMs);
           }
           // v157: ataque SINCRONIZADO fica salvo (sobrevive a captcha, bloqueio, recarregar e relogin)
-          var filaKey = (syncOn && typeof window.orkAmxFilaAdd === "function") ? window.orkAmxFilaAdd(aldeia, Date.now() + delayMs, targetTs) : null;
+          var filaKey = ((syncOn || persistirAmx) && typeof window.orkAmxFilaAdd === "function") ? window.orkAmxFilaAdd(aldeia, Date.now() + delayMs, targetTs) : null;
     
           // Estimativa de quando a tropa volta pra aldeia de origem: ida (duração) + volta
           // (aprox. igual à ida). Usamos isso pra saber quando toda a rodada "esvaziou".
@@ -5635,7 +5855,7 @@
             if (candidateReturn > roundReturnAtMs) roundReturnAtMs = candidateReturn;
           }
     
-          (syncOn ? amxTimeoutPreciso : function (f, d) { return setTimeout(f, d); })(function dispararSend() {
+          ((syncOn || persistirAmx) ? amxTimeoutPreciso : function (f, d) { return setTimeout(f, d); })(function dispararSend() {
             // v235: cancelado pela bolinha do sincronizador — não envia
             if (filaKey && window.orkAmxCancelado && window.orkAmxCancelado(filaKey)) {
               stopCountdown(aldeia.rowIndex);
@@ -5797,6 +6017,14 @@
           // pra todo mundo); sem sincronismo, cada aldeia só pega a próxima vaga livre
           // no ritmo de ~5/seg (sendCursor), assim que confirma.
           var syncOn = $("#syncChegada").is(":checked");
+          // v252: loop e demolidor usam a mesma fila salva do agendador (sobrevive a F5, troca de tela e captcha)
+          window.__AMX_PERSISTIR_LOOP__ = (function () {
+            try {
+              var fq = JSON.parse(localStorage.getItem("ork_amx_dem_fila") || "null");
+              var lc = JSON.parse(localStorage.getItem("ork_loop_ataque_config") || "null");
+              return !!((fq && fq.length) || (lc && lc.ativo));
+            } catch (eP) { return false; }
+          })();
           var targetTs = null;
           if (syncOn) {
             var timeVal = $("#syncTime").val(); // "HH:MM" ou "HH:MM:SS"
@@ -6246,11 +6474,27 @@
               "<div class='amx-hint'>Tudo isso fica guardado enquanto essa aba do jogo permanecer aberta. Se fechar a aba ou recarregar a página (F5), perde tudo e precisa clicar no bookmarklet de novo.</div>" +
     
               "<div class='amx-section'>" +
+                "<div class='amx-section-head'><span class='amx-section-icon'></span><span class='amx-section-title'>Opções de envio</span></div>" +
+                "<div class='amx-row'>" +
+                  "<div class='amx-field'><span class='amx-label'>N ataques por alvo</span><label class='amx-chip'><input type='checkbox' id='amxModoChk'/> Ligado (desligado = 1 ataque por alvo, como sempre)</label></div>" +
+                  "<div class='amx-field'><span class='amx-label'>Ataques por alvo</span><input type='number' id='amxPorAlvo' min='1' value='1'/></div>" +
+                  "<div class='amx-field'><span class='amx-label'>Lotes de (0 = sem lote)</span><input type='number' id='amxLote' min='0' value='0'/></div>" +
+                  "<div class='amx-field'><span class='amx-label'>Pausa entre lotes (s)</span><input type='number' id='amxLotePausa' min='0' value='30'/></div>" +
+                "</div>" +
+                "<div class='amx-row' style='gap:10px'>" +
+                  "<label class='amx-chip'><input type='checkbox' id='amxNobre1'/> +1 nobre por aldeia</label>" +
+                  "<label class='amx-chip'><input type='checkbox' id='amxSoNobre'/> Só nobre (1 por aldeia)</label>" +
+                  "<label class='amx-chip'><input type='checkbox' id='amxCatRand'/> Catapulta em prédio aleatório</label>" +
+                "</div>" +
+                "<div class='amx-hint'>Ligado: cada alvo recebe até N ataques (campo \"Ataques por alvo\") das aldeias mais próximas, sem repetir aldeia na mesma volta. Desligado: 1 ataque por alvo, como sempre. Lotes: envia N aldeias por vez e espera a pausa. Só nobre: cada aldeia manda só 1 nobre.</div>" +
+              "</div>" +
+              "<div class='amx-section'>" +
                 "<div class='amx-section-head'><span class='amx-section-icon'></span><span class='amx-section-title'>Demolidor</span></div>" +
                 "<div class='amx-hint'>Escolhe os prédios (na ordem que aparecem abaixo) e uma leva de ataque é enviada pra cada um, um de cada vez, usando as mesmas tropas/alvos acima. Ele não fica rodando sozinho pra sempre — termina a lista e para. Quando terminar, use o botão \"Repetir Mesmos Ataques\" acima pra repetir a volta inteira assim que as tropas voltarem.</div>" +
                 "<div class='amx-buildings' id='amxDemolidorChips'>" + demolidorChips + "</div>" +
                 "<div class='amx-actions'>" +
                   "<button type='button' id='amxDemolidorStart' class='amx-btn amx-btn-primary'>Iniciar Demolidor</button>" +
+                  "<button type='button' id='amxDemolidorCancelar' class='amx-btn'>⏹ Cancelar</button>" +
                   "<span class='amx-hint' id='amxDemolidorStatus'></span>" +
                 "</div>" +
               "</div>" +
@@ -6395,9 +6639,10 @@
             amxResolverNicks(nicks).then(function (res) {
               if (!res.coords.length) { $st.text("não achei aldeias desses nicks (confira a grafia exata)."); return; }
               var atual = ($("textarea[name=coords]").val() || "").trim();
-              var jaTem = {}; if (atual) { atual.split(/[\n,]+/).forEach(function (c) { var k = c.trim(); if (k) { jaTem[k] = 1; } }); }
+              var jaTem = {}; if (atual) { atual.split(/[\s,;]+/).forEach(function (c) { var k = c.trim(); if (k) { jaTem[k] = 1; } }); }
               var novas = res.coords.filter(function (c) { return !jaTem[c]; });
-              var tudo = (atual ? atual + "\n" : "") + novas.join("\n");
+              // v242: coordenadas lado a lado (com espaço), igual ao campo de coordenadas digitado
+              var tudo = (atual ? atual + " " : "") + novas.join(" ");
               $("textarea[name=coords]").val(tudo);
               try { setParam("coords", tudo); } catch (e) {}
               try { atualizarContadorAlvos(); } catch (e) {}
@@ -6560,6 +6805,29 @@
             amxEscolherDeTodasPaginas().catch(function (e) { $("#amxQtdInfo").html("<b style='color:#ff8080'>Erro ao ler as aldeias: " + (e && e.message) + "</b>"); });
           });
 
+          window.amxSetEstado = function (st, info) {
+            try { localStorage.setItem('ork_amx_estado', JSON.stringify({ st: st, info: info || '', t: Date.now() })); } catch (e) {}
+          };
+          window.amxLerOpcoes = function () {
+            var o = { modo: "padrao", porAlvo: 1, nobre1: false, soNobre: false, catRand: false, lote: 0, pausa: 30, qtd: 0, prio: "perto" };
+            try { var sv = JSON.parse(localStorage.getItem("ork_amx_opts") || "null"); if (sv) { for (var k in sv) { o[k] = sv[k]; } } } catch (e) {}
+            return o;
+          };
+          window.amxSalvarOpcoesDoForm = function () {
+            var o = {
+              modo: $("#amxModoChk").is(":checked") ? "porAlvo" : "padrao",
+              porAlvo: Math.max(1, parseInt($("#amxPorAlvo").val(), 10) || 1),
+              nobre1: $("#amxNobre1").is(":checked"),
+              soNobre: $("#amxSoNobre").is(":checked"),
+              catRand: $("#amxCatRand").is(":checked"),
+              lote: Math.max(0, parseInt($("#amxLote").val(), 10) || 0),
+              pausa: Math.max(0, parseInt($("#amxLotePausa").val(), 10) || 0),
+              qtd: Math.max(0, parseInt($("#amxQtdAtaques").val(), 10) || 0),
+              prio: $("#amxQtdPrioridade").val() || "perto"
+            };
+            try { localStorage.setItem("ork_amx_opts", JSON.stringify(o)); } catch (e) {}
+            return o;
+          };
           executarEnvio = function (buildingOverride, onRoundDone) {
             console.log("[AtaqueMass] Iniciando envio" + (buildingOverride ? " (Demolidor: " + buildingOverride + ")" : ""));
             onRoundDoneCallback = onRoundDone || null;
@@ -6611,7 +6879,13 @@
               }
     
               console.log("[AtaqueMass] aldeias próprias carregadas:", aldeias.length);
-              sortCoords();
+              var amxOM = window.amxLerOpcoes();
+              if (amxOM.modo === "porAlvo") {
+                amxParearPorAlvo(amxOM.porAlvo);
+              } else {
+                sortCoords();
+                aldeias.forEach(function (a, i) { a.ordem = i; });
+              }
     
               // Esconde a tabela de origem (a que lista aldeia por aldeia com os ícones
               // de tropa) assim que ela já foi lida. Ela precisa CONTINUAR existindo no
@@ -6693,6 +6967,7 @@
           // terminar) até acabar a lista escolhida.
           // ----------------------------------------------------------
           demolidorActive = false;
+          var demolidorCancelado = false;
           demolidorQueue = [];
           // v197: guarda a ORDEM DOS CLIQUES (antes numerava/enviava na ordem do DOM/lista)
           var demolidorOrdem = [];
@@ -6724,6 +6999,8 @@
           runNextDemolidorRound = function () {
             if (!demolidorQueue.length) {
               demolidorActive = false;
+              try { localStorage.removeItem("ork_amx_dem_fila"); } catch (eF) {}
+              window.amxSetEstado(orkLoopAtaqueAtivo() ? 'aguardando' : 'concluido', 'lista concluída');
               // v199: com o loop LIGADO, NÃO mostra o alerta bloqueante (que travava tudo até
               // alguém clicar OK). Em vez disso conta a volta e deixa o loop reiniciar a lista.
               if (window.__ORK_LOOP_SILENCIOSO__ || orkLoopAtaqueAtivo()) {
@@ -6737,18 +7014,70 @@
               }
               return;
             }
+            if (demolidorCancelado) { demolidorActive = false; demolidorQueue = []; $("#amxDemolidorStatus").text("⏹ Demolidor cancelado."); return; }
             var building = demolidorQueue.shift();
+            try { localStorage.setItem("ork_amx_dem_fila", JSON.stringify([building].concat(demolidorQueue))); } catch (eFila) {}
             var chip = $(".demolidor-chk[value='" + building + "']").closest(".amx-chip");
             var label = chip.find("span").first().text();
             chip.removeClass("amx-done").addClass("amx-sending");
             var _voltaTxt = (window.__ORK_DemolidorVoltas ? " · lista já rodada " + window.__ORK_DemolidorVoltas + "x" : "");
             $("#amxDemolidorStatus").text("Demolidor: enviando leva contra \"" + label + "\" (faltam " + demolidorQueue.length + " prédio(s))" + _voltaTxt);
+            window.amxSetEstado('enviando', 'prédio ' + label);
             executarEnvio(building, function () {
               chip.removeClass("amx-sending").addClass("amx-done");
               runNextDemolidorRound();
             });
           };
     
+          $("#amxDemolidorCancelar").click(function (e) {
+            e.preventDefault();
+            demolidorCancelado = true;
+            window.amxSetEstado('parado', 'cancelado pelo usuário');
+            demolidorQueue = [];
+            demolidorActive = false;
+            window.__ORK_DemolidorVoltas = 0;
+            try {
+              localStorage.removeItem("ork_amx_dem_fila");
+              var cfgL = JSON.parse(localStorage.getItem("ork_loop_ataque_config") || "null");
+              if (cfgL) { cfgL.ativo = false; localStorage.setItem("ork_loop_ataque_config", JSON.stringify(cfgL)); }
+            } catch (eC) {}
+            var chkL = document.getElementById("ork-loop-ataque-check"); if (chkL) { chkL.checked = false; }
+            $(".amx-chip").removeClass("amx-sending");
+            $("#amxDemolidorStatus").text("⏹ Demolidor cancelado. Não dispara mais levas; a que já estava no ar segue o curso normal.");
+          });
+
+          // v245: carrega opções salvas e liga o salvamento
+          (function () {
+            var o0 = window.amxLerOpcoes();
+            $("#amxModoChk").prop("checked", o0.modo === "porAlvo"); $("#amxPorAlvo").val(o0.porAlvo); $("#amxLote").val(o0.lote); $("#amxLotePausa").val(o0.pausa);
+            $("#amxNobre1").prop("checked", !!o0.nobre1); $("#amxSoNobre").prop("checked", !!o0.soNobre); $("#amxCatRand").prop("checked", !!o0.catRand);
+            // v246: quantidade e prioridade também (senão o demolidor retomado mandava pra página toda)
+            if (o0.qtd) { $("#amxQtdAtaques").val(o0.qtd); }
+            if (o0.prio) { $("#amxQtdPrioridade").val(o0.prio); }
+            $("#amxModoChk, #amxPorAlvo, #amxLote, #amxLotePausa, #amxNobre1, #amxSoNobre, #amxCatRand, #amxQtdAtaques, #amxQtdPrioridade").on("change input", function () { window.amxSalvarOpcoesDoForm(); });
+          })();
+
+          // v245: retoma a fila do Demolidor salva (igual ao agendador): se a página recarregar no meio, continua
+          (function amxRetomarDemolidor() {
+            try {
+              var fSalva = JSON.parse(localStorage.getItem("ork_amx_dem_fila") || "null");
+              if (fSalva && fSalva.length) {
+                setTimeout(function () {
+                  if (demolidorActive || !$("#amxDemolidorStart").length) { return; }
+                  demolidorQueue = fSalva.slice();
+                  lastDemolidorList = fSalva.slice();
+                  demolidorActive = true;
+                  demolidorCancelado = false;
+                  lastRoundType = "demolidor";
+                  var oR = window.amxLerOpcoes();
+                  try { localStorage.setItem("ork_amx_url", location.href); } catch (eU2) {}
+                  $("#amxDemolidorStatus").text("↻ Retomando o Demolidor salvo (" + fSalva.length + " prédio(s), " + (oR.qtd ? oR.qtd + " ataques" : "TODAS as aldeias da página") + ")...");
+                  runNextDemolidorRound();
+                }, 15000);
+              }
+            } catch (eR) {}
+          })();
+
           $("#amxDemolidorStart").click(function (e) {
             e.preventDefault();
             if (demolidorActive) {
@@ -6777,6 +7106,8 @@
             demolidorQueue = chosen;
             demolidorActive = true;
             window.__ORK_DemolidorVoltas = 0; // v199: zera o contador a cada início manual
+            demolidorCancelado = false;
+            try { localStorage.setItem("ork_amx_url", location.href); } catch (eU) {}
             if (!orkLoopAtaqueAtivo()) { window.__ORK_LOOP_SILENCIOSO__ = false; } // loop OFF: volta a mostrar o "concluído" no fim
             $(".amx-chip").removeClass("amx-done amx-sending");
             runNextDemolidorRound();
@@ -6897,6 +7228,22 @@
     // só que sem depender do botão (que fica desabilitado até a estimativa
     // de retorno das tropas, e nosso timer não precisa esperar isso).
     // ------------------------------------------------------------
+    // v248: o timer do loop fica só na memória — ao recarregar a página ele se perdia e nada reagendava.
+    // Ao carregar o Combinado com o loop ligado (e sem fila de demolidor salva), reagenda a próxima leva.
+    try {
+      var cfgRe = lerConfigLoop();
+      if (cfgRe.ativo) {
+        try { localStorage.setItem('ork_amx_url', location.href); } catch (eU) {}
+        if (!localStorage.getItem('ork_amx_dem_fila') && !window.demolidorActive) {
+          setTimeout(function () {
+            if (window.demolidorActive || window.__ORK_RodadaEmAndamento) { return; }
+            var prSalvo = parseInt(localStorage.getItem('ork_amx_prox') || '0', 10) || 0;
+            agendarProximoLoopAtaque(prSalvo ? (prSalvo > Date.now() ? prSalvo : Date.now() + 3000) : undefined);
+          }, 3000);
+        }
+      }
+    } catch (eRe) {}
+
     function acionarRodadaComLoop() {
       if (window.demolidorActive) {
         agendarProximoLoopAtaque(); // já tem uma rodada rodando, tenta de novo no próximo ciclo
@@ -6921,7 +7268,7 @@
       }
     }
 
-    function agendarProximoLoopAtaque() {
+    function agendarProximoLoopAtaque(alvoFixo) {
       var cfgAtual = lerConfigLoop();
       if (!cfgAtual.ativo) return;
       var intervaloBaseMs = Math.max(5000, (cfgAtual.min || 0) * 60000 + (cfgAtual.seg || 0) * 1000);
@@ -6931,7 +7278,7 @@
       // Dispara sempre nesse intervalo, tenha ou não tropa disponível na origem — o
       // próprio jogo já manda só o que tiver de cada tropa selecionada no modelo.
       var jitterMs = 10000 + Math.random() * 5000;
-      var alvo = Date.now() + intervaloBaseMs + jitterMs;
+      var alvo = (alvoFixo && alvoFixo > Date.now()) ? alvoFixo : (Date.now() + intervaloBaseMs + jitterMs);
 
       var intervaloMs = alvo - Date.now();
 
@@ -6943,11 +7290,13 @@
         st.textContent = '🔁 Próxima leva em ' + m + 'm ' + (s < 10 ? '0' : '') + s + 's';
       }
       atualizarContagem();
+      try { localStorage.setItem('ork_amx_prox', String(alvo)); } catch (eP) {}
+      if (window.amxSetEstado) { window.amxSetEstado('aguardando', 'próxima volta'); }
       if (window.__ORK_LoopAtaqueIntervaloVisual) { clearInterval(window.__ORK_LoopAtaqueIntervaloVisual); }
       window.__ORK_LoopAtaqueIntervaloVisual = setInterval(atualizarContagem, 1000);
       if (window.__ORK_LoopAtaqueTimeoutId) { clearTimeout(window.__ORK_LoopAtaqueTimeoutId); }
       // Freio ligado: espaça as levas (x2, mínimo 10 min)
-      if (window.__ORK_FREIO__) {
+      if (window.__ORK_FREIO__ && !alvoFixo) {
         var antesFreio = intervaloMs;
         intervaloMs = Math.max(10 * 60000, intervaloMs * 2);
         if (intervaloMs !== antesFreio) {
@@ -6958,6 +7307,7 @@
         if (window.__ORK_CAPTCHA_BLOQUEADO__) { // captcha: segura a leva e confere de novo em alguns segundos
           var stCap = document.getElementById('ork-loop-ataque-status');
           if (stCap) { stCap.textContent = '🔒 Captcha — a leva sai quando for resolvido'; }
+          if (window.amxSetEstado) { window.amxSetEstado('captcha', 'resolva o captcha'); }
           window.__ORK_LoopAtaqueTimeoutId = setTimeout(dispararLevaDoLoop, 4000);
           return;
         }
@@ -6968,6 +7318,7 @@
         var stDisp = document.getElementById('ork-loop-ataque-status');
         if (stDisp) { stDisp.textContent = '🚀 Disparando nova leva...'; }
         console.log('[OROCHIKING] Loop: disparando nova leva agora.');
+        if (window.amxSetEstado) { window.amxSetEstado('enviando', 'leva do loop'); }
         acionarRodadaComLoop();
       }, intervaloMs);
     }
@@ -18524,7 +18875,14 @@
     var alvoCoord = (+m[1]) + '|' + (+m[2]);
     var todas = (await balDadosProducao('0')).list_production;
     var alvo = todas.filter(function (v) { return v.coord === alvoCoord; })[0];
-    if (!alvo) { return { erro: 'A aldeia ' + alvoCoord + ' não é sua (ou não apareceu na Visualização → Produção).' }; }
+    if (!alvo) {
+      // v245: aldeia de OUTRO jogador (da tribo): precisa do espaço livre do armazém dela
+      var espacoLivre = Math.max(0, parseInt(cfg.armazemAlvo, 10) || 0);
+      if (!espacoLivre) { return { erro: 'A aldeia ' + alvoCoord + ' não é sua. Pra mandar pra aldeia de outro jogador, informe o espaço livre do armazém dela.' }; }
+      var idAlvo = await raIdPorCoord(alvoCoord);
+      if (!idAlvo) { return { erro: 'Não achei a aldeia ' + alvoCoord + ' no mapa do mundo.' }; }
+      alvo = { id: idAlvo, coord: alvoCoord, name: alvoCoord, wood: 0, stone: 0, iron: 0, capacity: espacoLivre };
+    }
     var origensTodas = (cfg.grupo && cfg.grupo !== '0') ? (await balDadosProducao(cfg.grupo)).list_production : todas;
     var chegando = new Map(); try { chegando = await balDadosChegando(); } catch (e) {}
     var ch = chegando.get(alvoCoord) || { wood: 0, stone: 0, iron: 0 };
@@ -18560,6 +18918,20 @@
     var tot = [0, 0, 0]; envios.forEach(function (e) { tot[0] += e.wood; tot[1] += e.stone; tot[2] += e.iron; });
     var moedas = Math.floor(Math.min(tot[0] / custo[0], tot[1] / custo[1], tot[2] / custo[2]));
     return { alvo: alvo, envios: envios, total: tot, moedas: moedas, espaco: espacoIni, cap: cap, chegando: ch, origens: origens.length };
+  }
+  // v245: id da aldeia pelo arquivo público do mapa (funciona pra aldeia de qualquer jogador)
+  async function raIdPorCoord(coord) {
+    var m = String(coord).match(/^(\d{1,3})\|(\d{1,3})$/);
+    if (!m) { return null; }
+    try {
+      var txt = await $.ajax({ url: '/map/village.txt', dataType: 'text' });
+      var linhas = String(txt).split('\n');
+      for (var i = 0; i < linhas.length; i++) {
+        var c = linhas[i].split(',');
+        if (c.length >= 4 && c[2] === m[1] && c[3] === m[2]) { return parseInt(c[0], 10) || null; }
+      }
+    } catch (e) { raLog('não consegui ler o mapa: ' + (e && e.message)); }
+    return null;
   }
   function raMapSend(origemId, alvoId, w, st, ir) {
     return new Promise(function (resolve) {
@@ -18662,6 +19034,7 @@
           '<div style="' + sec + '"><div style="' + stit + '">Pra onde</div>' +
             '<div style="display:flex;gap:4px;align-items:center"><span style="font-size:10.5px;color:#bbb;white-space:nowrap" data-dica="Coordenada da SUA aldeia com Academia — ela recebe tudo.">🏛️ Aldeia com Academia</span>' +
               '<input id="ork-ra-alvo" type="text" placeholder="500|500" value="' + gerHtml(c.alvo || '') + '" style="flex:1;' + inp + ';text-align:center">' +
+              '<div style="display:flex;gap:4px;align-items:center;margin-top:5px"><span style="font-size:10.5px;color:#bbb;white-space:nowrap" data-dica="Só se a aldeia for de OUTRO jogador (da tribo): quanto cabe no armazém dela hoje (madeira/argila/ferro, o menor). 0 = a aldeia é sua e o script usa o armazém dela.">📦 Espaço livre do alvo (outro jogador)</span><input id="ork-ra-cap" type="number" min="0" placeholder="0 = é minha" value="' + ((c.armazemAlvo || 0) || '') + '" style="width:120px;' + inp + ';text-align:center"></div>' +
               '<button type="button" id="ork-ra-aqui" style="background:#232323;color:#FFC400;border:1px solid #3a3a3a;border-radius:6px;padding:4px 8px;cursor:pointer;font-weight:700;font-size:10.5px;font-family:inherit">📍 aldeia atual</button></div>' +
             '<div style="' + lin + '"><span data-dica="Só as aldeias deste grupo mandam recurso.">Quem manda</span><select id="ork-ra-grupo" style="flex:1;' + inp + '"></select>' +
               '<button type="button" id="ork-ra-lergr" title="Ler os grupos do jogo" style="background:#232323;color:#FFC400;border:1px solid #3a3a3a;border-radius:6px;padding:4px 8px;cursor:pointer;font-weight:700;font-size:10.5px;font-family:inherit">🔄</button></div></div>' +
@@ -18693,7 +19066,7 @@
     v('ork-ra-aqui').addEventListener('click', function () { v('ork-ra-alvo').value = game_data.village.x + '|' + game_data.village.y; });
     function ler() {
       var n = raLer();
-      n.alvo = (v('ork-ra-alvo').value || '').trim(); n.grupo = v('ork-ra-grupo').value || '0';
+      n.alvo = (v('ork-ra-alvo').value || '').trim(); n.grupo = v('ork-ra-grupo').value || '0'; n.armazemAlvo = Math.max(0, parseInt(v('ork-ra-cap').value, 10) || 0);
       n.proporcao = v('ork-ra-prop').checked;
       n.custo = [v('ork-ra-c0'), v('ork-ra-c1'), v('ork-ra-c2')].map(function (x, i) { return Math.max(1, parseInt(x.value, 10) || [28000, 30000, 25000][i]); });
       var rr = String(v('ork-ra-res').value || '0').trim(); n.reserva = /%$/.test(rr) ? Math.min(100, Math.max(0, parseFloat(rr) || 0)) + '%' : Math.max(0, parseInt(rr.replace(/[^0-9]/g, ''), 10) || 0); n.distMax = Math.max(0, parseFloat(v('ork-ra-dist').value) || 0);
@@ -21140,8 +21513,26 @@
       else if (id === 'cunhar') { n0LigarCunhar(); }
     } catch (e) { console.warn('[OROCHIKING] N0/N1 ligar ' + id, e); }
   }
+  // v245: só UMA automação (N0/N1, N9 ou N4) roda por vez. Na troca, para só as ferramentas
+  // NÃO-farm da anterior; o farm (KeyPress/Farm Hard) continua e não é parado.
+  window.orkAutoPararOutro = function (quem) {
+    try { recParar('troca de automação (' + quem + ')'); } catch (e) {}
+    try { ciParar('troca de automação (' + quem + ')'); } catch (e) {}
+    try { if (window.__OROCHIKING__ && window.__OROCHIKING__.parar) { window.__OROCHIKING__.parar(); } } catch (e) {}
+    try { var pmT = pmLerCfg(); pmT.ativo = false; pmGravarCfg(pmT); } catch (e) {}
+    try { pararCunharPorSeguranca(); } catch (e) {}
+    try { nobParar('troca de automação (' + quem + ')'); } catch (e) {}
+    try { gerParar('troca de automação (' + quem + ')'); } catch (e) {}
+  };
+  window.orkAutoAssumir = function (nome) {
+    var atual = ''; try { atual = localStorage.getItem('ork_auto_dono') || ''; } catch (e) {}
+    if (atual && atual !== nome) { window.orkAutoPararOutro(atual); }
+    try { localStorage.setItem('ork_auto_dono', nome); } catch (e) {}
+  };
+  window.orkAutoLiberar = function (nome) { try { if (localStorage.getItem('ork_auto_dono') === nome) { localStorage.removeItem('ork_auto_dono'); } } catch (e) {} };
   function n0Ligar() {
     var c = n0Ler();
+    window.orkAutoAssumir('n0');
     try { if (typeof gravarRpv === 'function') { gravarRpv(true); } } catch (e) {} // espaça os comandos (Farm não para)
     if (c.farmTipo === 'keypress') { n0LigarFerramenta('keypress', c); }
     else if (c.farmTipo === 'farm') { n0LigarFerramenta('farm', c); }
@@ -21153,6 +21544,7 @@
     c.rodando = true; n0Gravar(c);
   }
   function n0PararTudo() {
+    window.orkAutoLiberar('n0');
     try { kpPararPorSeguranca(); } catch (e) {}
     try { if (window.__FarmHardParar) { window.__FarmHardParar(); } } catch (e) {}
     try { recParar('N0/N1 parado'); } catch (e) {}
@@ -21411,7 +21803,8 @@
   }
   function n9Ligar() {
     var c = n9Ler();
-    try { if (typeof gravarRpv === 'function') { gravarRpv(false); } } catch (e) {} // v229: N9 roda cada ferramenta conforme a setagem (Rodar por vez desligado)
+    window.orkAutoAssumir('n9');
+    try { if (typeof gravarRpv === 'function') { gravarRpv(true); } } catch (e) {} // v245: espaça os comandos (farm não para, mas não sincroniza)
     if (c.farm) { n9LigarFarm(); }
     if (c.rec) { try { recGravar(n9RecCfg()); recMostrarBolinha(); recRodarCiclo(); } catch (e) {} }
     if (c.ci) { try { var ci = n9CiCfg(); ci.ativo = true; ciGravar(ci); ciMostrarBolinha(); ciRodarCiclo(); } catch (e) {} }
@@ -21423,6 +21816,7 @@
     c.rodando = true; n9Gravar(c);
   }
   function n9PararTudo() {
+    window.orkAutoLiberar('n9');
     try { if (window.__FarmHardParar) { window.__FarmHardParar(); } } catch (e) {}
     try { recParar('N9 parado'); } catch (e) {}
     try { ciParar('N9 parado'); } catch (e) {}
@@ -21508,6 +21902,234 @@
     }
     desenhar();
   }
+
+  /* ===== N4 — AUTOMÁTICO (v240): cópia do N9 com a setagem própria ===== */
+  var N4_MODELO_GC = 'fAIAAQkBDwEQAQwBDQEOAQ0BDAENAQ4BDQEMAQwBDQEOAQ4BDQEMAQwBDgEOAQABAAEBAQ8BEAEQARABDwEQARABAAEAAQgBCAEIAQgBAQEBAQEBCAEBAQsBAAEAAQABAAEAAQgBCAEIAQgBCAECAQIBAgEQARABEAEQARIBCgEAAQABAAEAAQABAQEBAQEBAQEBAQIBAgECAQIBDQENAQ0BDQEMAQwBDAEOAQ4BDgEQARABDwEPAQ8BDwESARIBEgESAQwBDQEMAQ0BDgENAQwBAgECAQIBAQEBAQEBAQEBAQMBAwEIAQgBDQENAQwBDAEOAQ4BEAEQAQ8BDwEPARIBEgESARIBEgEQAQ8BDgEOAQ0BDQEMAQwBDQEOAQ0BDAEMAQgBCAEIAQsBCwELAQsBDQEOAQ4BDAEMAQ0BDQEOAQ4BDAEMAQ8BDwESARIBEgESARIBDwEPAQ4BDQEMAQ4BDgEOAQ8BDwEPAQ8BDwEPAQ8BAAEAARABAAEAARABAAEAARABAAEAARABEAEBAQEBAQEBAQsBCwELAQsBCwECAQIBAgECAQIBAwEDAQMBDwEQAQgBEAEBAQEBAgEIAQgBAQEBAQgBCAEHARABAQEBAQIBAgECARIBEgECARIBDwESARABEgEQAQ8BEAEPARABEAEPARABEAEPAQ8BDwEDAQMBAwEDAQMBAwEDAQMBAwEDAQ0BDQEMAQwBDgEOAQ0BDQEMAQwBDgENAQ0BDAEOAQ4BDQEMAQwBDgEOAQABAAEAAQABCwELAQsBCwELAQsBCwELAQsBCwEAAQABAAELAQsBCwELAQsBEQERAREBEQERAREBEQERAREBEQEKAfSAgIBPUk9DSCAtIE40IC0gQkFMQU5DRUFET/SAgIA0';
+  var n4PesqTimer = null;
+  function n4Chave() { return 'ork_n4_' + n0Mundo(); }
+  function n4Ler() {
+    var p = { farm: true, rec: true, ci: true, ger: true, coletor: true, pesq: true, cunhar: true, noblar: true, rodando: false, recModo: 'atk' };
+    try { var c = JSON.parse(localStorage.getItem(n4Chave()) || 'null'); if (c && typeof c === 'object') { for (var k in c) { p[k] = c[k]; } } } catch (e) {}
+    return p;
+  }
+  function n4Gravar(c) { try { localStorage.setItem(n4Chave(), JSON.stringify(c)); } catch (e) {} }
+  function n4FarmPadrao() {
+    var set = function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} };
+    set('fh_cl_minimo', '20'); set('fh_cp_minimo', '20'); set('fh_recurso_minimo', '12000');
+    set('fh_muralha_max', ''); set('fh_ritmo_humano', '0'); set('fh_prioriza_rica', '0');
+    set('fh_saque_min', '8000'); set('fh_saque_min_on', '0'); set('fh_por_visita', '1'); set('fh_paginas', '1'); set('fh_uma_aba', '1');
+  }
+  function n4RecCfg() { return n0RecCfg(n4Ler().recModo === 'def' ? 'def' : 'atk'); }
+  function n4ModeloGC() {
+    var cod = ciLerCodigoGerente(N4_MODELO_GC);
+    if (!cod || !cod.passos || !cod.passos.length) { return null; }
+    return { id: 'n4mod', nome: 'N4 — Modelo Orochi', passos: cod.passos };
+  }
+  function n4CiCfg() {
+    var c = ciLer();
+    try {
+      var pr = n0ModelosProntos(); var mod = n4ModeloGC();
+      if (mod) { pr = pr.concat([mod]); }
+      if (pr.length) { c.modelos = pr; c.regras = [{ grupo: '0', grupoNome: 'Todas as aldeias', modelo: mod ? mod.id : pr[pr.length - 1].id }]; }
+    } catch (e) {}
+    c.fila = 5; c.intervalo = 1; c.proximoEm = 0;
+    return c;
+  }
+  function n4ColetorPadrao() {
+    var over = { grupo: '0', raio: 550, maxPorOrigem: 10, pontosMin: 0, pontosMax: 12500, modelo: 'a', pausa: 250, repetirAlvo: false, pularAssistente: true, pularEmVoo: true, priorizarRecentes: true, repetir: false, intervalo: 1, detalhado: false };
+    try { var cur = JSON.parse(localStorage.getItem('orochiking_cfg_' + location.host) || '{}'); if (!cur || typeof cur !== 'object') { cur = {}; } for (var k in over) { cur[k] = over[k]; } localStorage.setItem('orochiking_cfg_' + location.host, JSON.stringify(cur)); } catch (e) {}
+    try { var api = window.__OROCHIKING__; if (api && api.cfg) { var live = api.cfg(); for (var k2 in over) { live[k2] = over[k2]; } } } catch (e) {}
+  }
+  function n4PesqCfg() {
+    var c = pmLerCfg();
+    var todas = ['spear', 'sword', 'axe', 'spy', 'light', 'heavy', 'ram', 'catapult'];
+    var doMundo = (window.game_data && Array.isArray(game_data.units)) ? game_data.units : null;
+    c.ativo = false; c.grupo = '0'; c.nivel = 1; c.unidades = doMundo ? todas.filter(function (u) { return doMundo.indexOf(u) >= 0; }) : todas; c.eMin = 0.5; c.eMax = 1.2;
+    return c;
+  }
+  function n4CunharPadrao() {
+    try { gravarRegrasCunhar({ max: 0, guardar: 0 }); } catch (e) {}
+    try { gravarConfigCunhar({ ativo: false, intervaloMs: 180000, foraAcad: false, formarNobres: true, modoPaginas: 'tudo', proximoEm: 0, grupo: '0', grupoNome: 'Todas as aldeias' }); } catch (e) {}
+  }
+  function n4NobCfg() {
+    var c = nobLer();
+    c.grupo = '0'; c.grupoNome = 'Todas as aldeias';
+    c.espacamento = 4; c.distMax = 30; c.pontosMin = 0; c.pontosMax = 13000;
+    c.priorizarBonus = true; c.soBonus = false; c.espacoMinhas = true; c.reduzirAuto = true; c.vizMin = 2;
+    try { c.bonusTipos = NOB_BONUS.map(function (b) { return b[0]; }); } catch (e) {}
+    c.continentes = ''; c.refs = [];
+    c.nobres = 4; c.reforco = 1; c.maxSimult = 0; c.intervaloUni = 'seg'; c.intervaloMin = 22;
+    c.escoltas = [{ u: 'axe', n: 122 }, { u: 'light', n: 22 }, { u: 'heavy', n: 22 }];
+    c.full = false; c.predio = ''; c.somar = false; c.envioMin = 0.5; c.envioMax = 0.8;
+    c.produzir = true; c.produzirMax = 20; c.produzirRaio = 25; c.produzirAldeias = 1; c.juntarNobres = true; c.prodMin = 0.7; c.prodMax = 1.5;
+    c.retirarApoio = true; c.pesquisar = true; c.recrutarEsp = 10; c.explorarQtd = 10; c.vizinhasMin = 1;
+    c.proximoEm = 0;
+    return c;
+  }
+  function n4GerEscolher(lista, testes, campoNome) {
+    lista = (lista || []).filter(function (m) { return m && (m[campoNome] || m.id != null); });
+    for (var i = 0; i < testes.length; i++) {
+      for (var j = 0; j < lista.length; j++) { if (testes[i].test(String(lista[j][campoNome] || ''))) { return lista[j]; } }
+    }
+    return lista[0] || null;
+  }
+  async function n4GerConfigurar(ligar) {
+    var cat = null;
+    try { cat = await gerAtualizarCatalogo(); } catch (e) { cat = gerLerCatalogo(); }
+    cat = cat || { construcao: [], tropas: [], pesquisa: [] };
+    var cons = n4GerEscolher(cat.construcao, [/academia/i, /9444/, /conquist/i], 'nome');
+    var trop = n4GerEscolher(cat.tropas, [/farm/i], 'nome');
+    var pesq = n4GerEscolher(cat.pesquisa, [/pesquis/i, /research/i, /\ball\b/i, /tudo|todas/i], 'nome');
+    var c = gerLer();
+    c.regras = (cons || trop) ? [{ grupo: '0', grupoNome: 'Todas as aldeias', cons: cons ? String(cons.id) : '', consNome: cons ? String(cons.nome || cons.id) : '', trop: trop ? String(trop.nome) : '' }] : [];
+    c.consModo = 'jogo'; c.recModo = 'jogo'; c.maxFila = 5; c.semRegraUsaAldeia = false;
+    c.intervaloMin = 1; c.intervaloUni = 'min';
+    c.pesquisar = true; c.pesqGrupo = '0'; c.pesqGrupoNome = 'Todas as aldeias';
+    if (pesq) { c.pesqModo = 'jogo'; c.pesqTemplate = String(pesq.id); c.pesqTemplateNome = String(pesq.nome || pesq.id); }
+    else { c.pesqModo = 'painel'; c.pesqUnidades = gerUnidadesPesquisaveis(); } // sem modelo de pesquisa no jogo: pesquisa pelo painel
+    gerLog('N4: construção "' + (cons ? cons.nome : '—') + '", tropas "' + (trop ? trop.nome : '—') + '", pesquisa "' + (pesq ? pesq.nome : 'pelo painel') + '" (Todas as aldeias, fila 5, 1 min).');
+    if (!c.regras.length && !c.pesquisar) { gerGravar(c); return c; }
+    if (ligar) { c.ativo = true; c.proximoEm = 0; c.feitos = []; }
+    gerGravar(c);
+    if (ligar) { try { gerMostrarBolinha(); gerRodarCiclo(); } catch (e) {} }
+    return c;
+  }
+  function n4SetarConfig() {
+    try { var lg = n4Ler(); lg.farm = true; lg.rec = true; lg.ci = true; lg.ger = true; lg.coletor = true; lg.pesq = true; lg.cunhar = true; lg.noblar = true; n4Gravar(lg); } catch (e) {}
+    try { n4GerConfigurar(false); } catch (e) {}
+    n4FarmPadrao();
+    try { recGravar(n4RecCfg()); } catch (e) {}
+    try { ciGravar(n4CiCfg()); } catch (e) {}
+    n4ColetorPadrao();
+    try { pmGravarCfg(n4PesqCfg()); } catch (e) {}
+    n4CunharPadrao();
+    try { nobGravar(n4NobCfg()); } catch (e) {}
+  }
+  function n4LigarFarm() {
+    n4FarmPadrao();
+    try { rodarFarmar(); } catch (e) {}
+    var tent = 0, t = setInterval(function () {
+      tent++;
+      var pop = document.getElementById('farmhard-popup');
+      if (pop) {
+        try { var bv = pop.querySelector('.fh-vel[data-fator="2"]') || pop.querySelector('[data-fator="2"]'); if (bv) { bv.click(); } } catch (e) {}
+        try { var gr = pop.querySelector('.fh-opcao-input[value="4"]'); if (gr && !gr.checked) { gr.checked = true; gr.dispatchEvent(new Event('change', { bubbles: true })); } } catch (e) {}
+        try { var ini = document.getElementById('fh-iniciar'); if (ini) { ini.click(); clearInterval(t); return; } } catch (e) {}
+      }
+      if (tent > 25) { clearInterval(t); }
+    }, 300);
+  }
+  function n4PesqAgendar(ligar) {
+    try { clearInterval(n4PesqTimer); } catch (e) {}
+    n4PesqTimer = null;
+    if (!ligar) { return; }
+    // Pesquisa em Massa a cada 3 min (roda quando a tela de Pesquisa estiver aberta)
+    n4PesqTimer = setInterval(function () { try { if (pmNaTela() && !pmRodando) { pmRetomar(); } } catch (e) {} }, 180000);
+  }
+  function n4Ligar() {
+    var c = n4Ler();
+    window.orkAutoAssumir('n4');
+    try { if (typeof gravarRpv === 'function') { gravarRpv(true); } } catch (e) {} // v245: espaça os comandos (farm não para, mas não sincroniza)
+    if (c.farm) { n4LigarFarm(); }
+    if (c.rec) { try { recGravar(n4RecCfg()); recMostrarBolinha(); recRodarCiclo(); } catch (e) {} }
+    if (c.ci) { try { var ci = n4CiCfg(); ci.ativo = true; ciGravar(ci); ciMostrarBolinha(); ciRodarCiclo(); } catch (e) {} }
+    if (c.coletor) { try { n4ColetorPadrao(); var api = window.__OROCHIKING__; if (api && api.cfg) { var cc = api.cfg(); cc.ativo = true; try { api.abrir(); } catch (e) {} try { api.iniciar(); } catch (e) {} } } catch (e) {} }
+    if (c.pesq) { try { var pm = n4PesqCfg(); pm.ativo = true; pmGravarCfg(pm); if (pmNaTela()) { pmRetomar(); } n4PesqAgendar(true); } catch (e) {} }
+    if (c.cunhar) { try { n4CunharPadrao(); n0LigarCunhar(); } catch (e) {} }
+    if (c.noblar) { try { var nb = n4NobCfg(); nb.ativo = true; nobGravar(nb); nobRetomar(); } catch (e) {} }
+    if (c.ger) { try { n4GerConfigurar(true); } catch (e) {} }
+    c.rodando = true; n4Gravar(c);
+  }
+  function n4PararTudo() {
+    window.orkAutoLiberar('n4');
+    try { clearInterval(n4PesqTimer); n4PesqTimer = null; } catch (e) {}
+    try { if (window.__FarmHardParar) { window.__FarmHardParar(); } } catch (e) {}
+    try { recParar('N4 parado'); } catch (e) {}
+    try { ciParar('N4 parado'); } catch (e) {}
+    try { if (window.__OROCHIKING__ && window.__OROCHIKING__.parar) { window.__OROCHIKING__.parar(); } } catch (e) {}
+    try { var pm = pmLerCfg(); pm.ativo = false; pmGravarCfg(pm); } catch (e) {}
+    try { pararCunharPorSeguranca(); } catch (e) {}
+    try { nobParar('N4 parado'); } catch (e) {}
+    try { gerParar('N4 parado'); } catch (e) {}
+    var c = n4Ler(); c.rodando = false; n4Gravar(c);
+  }
+  function n4AbrirFerramenta(id) {
+    try {
+      if (id === 'farm') { rodarFarmar(); }
+      else if (id === 'rec') { rodarRecrutador(); }
+      else if (id === 'ci') { rodarConstrucaoInd(); }
+      else if (id === 'coletor') { if (window.__OROCHIKING__ && window.__OROCHIKING__.abrir) { window.__OROCHIKING__.abrir(); } }
+      else if (id === 'pesq') { rodarPesqMassa(); }
+      else if (id === 'cunhar') { rodarCunhar(); }
+      else if (id === 'noblar') { rodarNobre(); }
+      else if (id === 'ger') { rodarGerente(); }
+      else if (id === 'ataque') { try { var fa = FERRAMENTAS_POR_ID.ataque; if (fa) { orkExecutar(fa); } else { rodarAtaque(); } } catch (e2) { rodarAtaque(); } }
+    } catch (e) {}
+  }
+  function n4Estilo() {
+    n0Estilo();
+    if (document.getElementById('ork-n4-estilo')) { return; }
+    var base = document.getElementById('ork-n0-estilo');
+    var st = document.createElement('style'); st.id = 'ork-n4-estilo';
+    st.textContent = (base ? base.textContent : '').replace(/#ork-n0\b/g, '#ork-n4');
+    document.head.appendChild(st);
+  }
+  function checaN4() { return !!(window.game_data && game_data.village && game_data.village.id); }
+  function rodarN4() {
+    n4Estilo();
+    var velho = document.getElementById('ork-n4-ov'); if (velho) { velho.remove(); }
+    var ov = document.createElement('div'); ov.id = 'ork-n4-ov';
+    var box = document.createElement('div'); box.id = 'ork-n4';
+    ov.appendChild(box); document.body.appendChild(ov);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) { ov.remove(); } });
+    function linha(ico, nome, sub, key, cfg) {
+      return '<div class="row"><span class="ico">' + ico + '</span><div class="nm">' + nome + (sub ? ' <small>' + sub + '</small>' : '') + '</div>' +
+        '<button class="pill" data-tog="' + key + '"></button><span class="cfg" data-cfg="' + cfg + '">⚙</span></div>';
+    }
+    function desenhar() {
+      var c = n4Ler();
+      box.innerHTML =
+        '<div class="hd" id="n4-hd"><span>⚡</span><span class="t">N4 — Conquistadores</span><span class="x" id="n4-x">✕</span></div>' +
+        '<div class="bd">' +
+          '<div class="inst">⚡ Preset <b>automático</b>: farma, constrói (<b>modelo do GC</b>), recruta (<b>Ataque ou Defesa</b>), coleta, pesquisa a cada <b>3 min</b>, cunha e <b>nobla bárbaras sozinho</b>.' +
+            '<div class="l2">Ligue com <b>Cavalaria Leve</b> já em casa. Você só resolve o <b>captcha</b> quando aparecer. Dá pra ajustar cada ferramenta no ⚙.</div></div>' +
+          '<button class="setar" id="n4-setar">⚡ Setar Configuração N4</button>' +
+          '<div class="setsub">Setar = carrega o padrão (não começa). <b style="color:#9ad29a">▶ Ligar</b> embaixo começa a rodar.</div>' +
+          '<div class="sec"><span class="n">1</span> FARM</div>' +
+          linha('🚜', 'Farm Hard', '2x · 4 grupos · 1 aba', 'farm', 'farm') +
+          '<div class="sec"><span class="n">2</span> CONSTRUIR / RECRUTAR</div>' +
+          linha('🏛️', 'Construtor Independente', 'modelo do GC · fila 5 · 1 min', 'ci', 'ci') +
+          linha('⚔️', 'Recrutador', 'Ataque ou Defesa (escolha abaixo)', 'rec', 'rec') + '<div class="row"><span class="ico">🎯</span><div class="nm">Modelo do Recrutador</div><div class="seg" id="n4-rm"><span class="' + (c.recModo === 'def' ? '' : 'sa') + '" data-rm="atk">Ataque</span><span class="' + (c.recModo === 'def' ? 'sd' : '') + '" data-rm="def">Defesa</span></div></div>' +
+          linha('🧑‍💼', 'Gerente de Conta', 'modelos do jogo (Academia · FARM · Pesquisa) · todas · fila 5 · 1 min', 'ger', 'ger') +
+          '<div class="sec"><span class="n">3</span> CONQUISTA</div>' +
+          linha('👑', 'Noblar Automático', 'bárbaras · ciclo 22s', 'noblar', 'noblar') +
+          '<div class="row"><span class="ico">⚔️</span><div class="nm">Atacar / Apoiar <small>desligado · você configura manual (⚙)</small></div><span class="pill" style="opacity:.55;cursor:default">Manual</span><span class="cfg" data-cfg="ataque">⚙</span></div>' +
+          '<div class="sec" style="color:#8a8a8a">EXTRAS <small>— rodam junto, espaçados</small></div>' +
+          linha('⛏️', 'Coletor Hard', '1 min · raio 550', 'coletor', 'coletor') +
+          linha('🔬', 'Pesquisar em Massa', 'todas as tropas · nível 1 · a cada 3 min', 'pesq', 'pesq') +
+          linha('🪙', 'Cunhagem', 'todas as páginas · guardar 0 · 3 min', 'cunhar', 'cunhar') +
+          '<button class="ligar" id="n4-ligar">▶ Ligar N4</button>' +
+          '<div class="ft"><button class="parar" id="n4-parar">⏸ Parar tudo</button><button class="fechar" id="n4-fechar">Fechar</button></div>' +
+          '<div class="stt" id="n4-stt" style="color:' + (c.rodando ? '#58c47a' : '#8a8a8a') + '">' + (c.rodando ? '✔ Rodando · comandos espaçados' : '⏸ Parado — clique em ▶ Ligar pra começar') + '</div>' +
+        '</div>';
+      box.querySelectorAll('.pill[data-tog]').forEach(function (b) { var k = b.getAttribute('data-tog'); b.classList.toggle('on', !!c[k]); b.textContent = c[k] ? '✓ Ligado' : 'Desligado'; b.addEventListener('click', function () { var n = n4Ler(); n[k] = !n[k]; n4Gravar(n); desenhar(); }); });
+      box.querySelectorAll('[data-rm]').forEach(function (s) { s.addEventListener('click', function () { var n = n4Ler(); n.recModo = s.getAttribute('data-rm') === 'def' ? 'def' : 'atk'; n4Gravar(n); desenhar(); }); });
+      box.querySelectorAll('.cfg[data-cfg]').forEach(function (g) { g.addEventListener('click', function () { n4AbrirFerramenta(g.getAttribute('data-cfg')); }); });
+      box.querySelector('#n4-x').addEventListener('click', function () { ov.remove(); });
+      box.querySelector('#n4-fechar').addEventListener('click', function () { ov.remove(); });
+      box.querySelector('#n4-setar').addEventListener('click', function () { var btn = this; try { n4SetarConfig(); } catch (e) {} var s = box.querySelector('#n4-stt'); s.style.color = '#58c47a'; s.textContent = '✔ Configurações setadas pro padrão N4. Agora clique em ▶ Ligar.'; var t0 = btn.innerHTML; btn.innerHTML = '✔ Configurações setadas!'; setTimeout(function () { try { btn.innerHTML = t0; } catch (e) {} }, 1600); });
+      box.querySelector('#n4-ligar').addEventListener('click', function () { n4Ligar(); desenhar(); });
+      box.querySelector('#n4-parar').addEventListener('click', function () { n4PararTudo(); desenhar(); });
+      (function () {
+        var hd = box.querySelector('#n4-hd'), ox = 0, oy = 0, dragging = false;
+        hd.addEventListener('mousedown', function (e) { if (e.target.id === 'n4-x') { return; } dragging = true; var r = box.getBoundingClientRect(); ox = e.clientX - r.left; oy = e.clientY - r.top; box.style.position = 'fixed'; box.style.margin = '0'; e.preventDefault(); });
+        document.addEventListener('mousemove', function (e) { if (!dragging) { return; } box.style.left = (e.clientX - ox) + 'px'; box.style.top = (e.clientY - oy) + 'px'; });
+        document.addEventListener('mouseup', function () { dragging = false; });
+      })();
+    }
+    desenhar();
+  }
+
 
   /* ============================================================
      DESVIAR TROPAS (v219) — botão de pânico pra esconder as tropas
@@ -22065,6 +22687,252 @@
     ]);
   }
 
+  /* ===== v241: DEMOLIR DE MURALHAS =====
+     Manda a tropa escolhida (ex.: 250 Bárbaro + 25 Ariete + 1 Explorador) pras bárbaras num raio em volta
+     de CADA aldeia sua, pra derrubar a muralha delas e melhorar o farm.
+     Alvos: lidos do Assistente de Saque (mesma fonte do Farm Hard). Um ataque por alvo por ciclo,
+     sempre da aldeia sua mais perto. Envio pela tela de ataque do próprio jogo (place). */
+  var DM_NOMES = { spear: 'Lanceiro', sword: 'Espadachim', axe: 'Bárbaro', archer: 'Arqueiro', spy: 'Explorador', light: 'Cav. leve', marcher: 'Arq. a cavalo', heavy: 'Cav. pesada', ram: 'Ariete', catapult: 'Catapulta', knight: 'Paladino', militia: 'Milícia' };
+  var DM_ORDEM = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'militia'];
+  var DM_PADRAO = { raio: 10, intervaloMin: 30, velocidade: 1, maxPorCiclo: 60, porAlvo: 1, catRandom: false, tropas: { axe: 250, ram: 25, spy: 1 } };
+  var dmTimer = null, dmRodando = false, dmParando = false;
+  function dmChave() { return 'ork_demolir_' + ((window.game_data && game_data.world) || ''); }
+  function dmLer() {
+    var c = { ativo: false, raio: DM_PADRAO.raio, intervaloMin: DM_PADRAO.intervaloMin, velocidade: DM_PADRAO.velocidade, maxPorCiclo: DM_PADRAO.maxPorCiclo, porAlvo: DM_PADRAO.porAlvo, catRandom: DM_PADRAO.catRandom, tropas: JSON.parse(JSON.stringify(DM_PADRAO.tropas)), ciclos: 0 };
+    try {
+      var s = JSON.parse(localStorage.getItem(dmChave()) || 'null');
+      if (s && typeof s === 'object') { for (var k in s) { if (k !== 'tropas') { c[k] = s[k]; } } if (s.tropas && typeof s.tropas === 'object') { c.tropas = s.tropas; } }
+    } catch (e) {}
+    return c;
+  }
+  function dmGravar(c) { try { localStorage.setItem(dmChave(), JSON.stringify(c)); } catch (e) {} }
+  function dmLog(t) {
+    try { console.log('[OROCHIKING] Demolir: ' + t); } catch (e) {}
+    var el = document.getElementById('dm-log');
+    if (el) { var l = document.createElement('div'); l.textContent = new Date().toLocaleTimeString('pt-BR') + '  ' + t; el.insertBefore(l, el.firstChild); while (el.children.length > 60) { el.removeChild(el.lastChild); } }
+  }
+  function dmStatus(t) { var el = document.getElementById('dm-status'); if (el) { el.textContent = t; } var b = document.getElementById('ork-dm-bolinha'); if (b) { b.textContent = '🧱 Demolir: ' + t; } }
+  // v245: bolinha na tela (igual às outras automações) — mostra que o demolidor está rodando/esperando
+  function dmBolinha(on) {
+    var el = document.getElementById('ork-dm-bolinha');
+    if (!on) { if (el) { el.remove(); } return; }
+    if (!el) {
+      el = document.createElement('div'); el.id = 'ork-dm-bolinha';
+      el.style.cssText = 'position:fixed;left:14px;bottom:14px;z-index:2147483000;background:#141200;color:#FFC400;border:1px solid #8a6d00;border-radius:20px;padding:6px 12px;font:700 12px "Segoe UI",Arial,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.6)';
+      el.title = 'Demolir de Muralhas: clique pra abrir';
+      el.addEventListener('click', function () { dmAbrir(); });
+      document.body.appendChild(el);
+    }
+    el.textContent = '🧱 Demolir: ' + ((document.getElementById('dm-status') || {}).textContent || 'ativo');
+  }
+  function dmUnidades() { var u = (window.game_data && game_data.units) || []; return DM_ORDEM.filter(function (x) { return u.indexOf(x) !== -1; }); }
+  function dmCoord(s) { var m = String(s || '').match(/(\d{1,3})\|(\d{1,3})/); return m ? { x: +m[1], y: +m[2], k: m[1] + '|' + m[2] } : null; }
+  function dmDoc(html) { return new DOMParser().parseFromString(html, 'text/html'); }
+  var DM_ID = Math.random().toString(36).slice(2);
+  function dmSouDono() {
+    var k = 'ork_dm_dono_' + ((window.game_data && game_data.world) || '');
+    var d = null; try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) {}
+    if (d && d.id !== DM_ID && Date.now() - d.t < 90000) { return false; }
+    try { localStorage.setItem(k, JSON.stringify({ id: DM_ID, t: Date.now() })); } catch (e) {}
+    return true;
+  }
+  function dmCaptcha(doc) { return !!doc.querySelector('#bot_check, [id^="bot_check"]'); }
+  function dmErro(doc) { var e = doc.querySelector('.error_box, #error, .error'); return e ? (e.textContent || '').replace(/\s+/g, ' ').trim() : ''; }
+  // formulário -> corpo (campos ativos, como o navegador enviaria)
+  function dmCorpo(form) {
+    var corpo = new URLSearchParams();
+    Array.prototype.slice.call(form.elements).forEach(function (el) {
+      if (!el.name || el.disabled) { return; }
+      if (el.type === 'submit' || el.type === 'button' || el.type === 'image' || el.type === 'file') { return; }
+      if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) { return; }
+      corpo.append(el.name, el.value);
+    });
+    return corpo;
+  }
+  // minhas aldeias com coordenadas (mesma leitura da Produção que as outras ferramentas usam)
+  async function dmMinhasAldeias() {
+    var dados = await balDadosProducao('0'), out = [];
+    (dados.list_production || []).forEach(function (v) { var c = dmCoord(v.coord || v.name); if (c && v.id) { out.push({ id: String(v.id), x: c.x, y: c.y, k: c.k }); } });
+    return out;
+  }
+  // alvos: bárbaras do Assistente de Saque (lista paginada), sem as suas aldeias
+  async function dmAlvos(minhasKeys) {
+    var mapa = new Map();
+    var base = '/game.php?village=' + game_data.village.id + '&screen=am_farm&order=distance&dir=asc&Farm_page=';
+    for (var p = 0; p < 50 && !dmParando; p++) {
+      var antes = mapa.size;
+      var doc = dmDoc(await (await fetch(base + p, { credentials: 'include' })).text());
+      doc.querySelectorAll('#plunder_list tr[id^="village_"]').forEach(function (row) {
+        var link = row.querySelector('a[href*="screen=report&mode=all&view="]');
+        var c = link && dmCoord(link.textContent);
+        if (c && !minhasKeys.has(c.k)) { mapa.set(c.k, c); }
+      });
+      if (mapa.size === antes) { break; }
+      await gerEsperar(gerEntre(300, 600));
+    }
+    return Array.from(mapa.values());
+  }
+  // um ataque: abre a tela de ataque da aldeia de origem, põe as tropas, confirma (2 passos, como o jogo)
+  async function dmEnviar(origem, alvo, tropas, catRandom) {
+    var base = '/game.php?village=' + origem + '&screen=place';
+    var doc1 = dmDoc(await (await fetch(base + '&x=' + alvo.x + '&y=' + alvo.y, { credentials: 'include' })).text());
+    if (dmCaptcha(doc1)) { return { captcha: true }; }
+    var f1 = doc1.querySelector('#command-data-form') || doc1.querySelector('form[action*="screen=place"]');
+    if (!f1) { return { erro: 'tela de ataque não abriu' }; }
+    var corpo = dmCorpo(f1);
+    corpo.set('x', alvo.x); corpo.set('y', alvo.y);
+    dmUnidades().forEach(function (u) { corpo.set(u, String(parseInt(tropas[u], 10) || 0)); });
+    if (catRandom && (parseInt(tropas.catapult, 10) || 0) > 0) {
+      var opcCat = Array.prototype.slice.call(doc1.querySelectorAll('select[name="catapult_target"] option')).map(function (o) { return o.value; }).filter(function (v) { return v; });
+      if (opcCat.length) { corpo.set('catapult_target', opcCat[Math.floor(Math.random() * opcCat.length)]); }
+    }
+    var botaoAtaque = f1.querySelector('#target_attack, input[name="attack"]');
+    corpo.set((botaoAtaque && botaoAtaque.name) || 'attack', (botaoAtaque && botaoAtaque.value) || 'Atacar');
+    var url1 = new URL(f1.getAttribute('action') || base, location.href).href;
+    var doc2 = dmDoc(await (await fetch(url1, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: corpo.toString() })).text());
+    if (dmCaptcha(doc2)) { return { captcha: true }; }
+    var f2 = doc2.querySelector('#command-data-form');
+    if (!f2) { return { erro: dmErro(doc2) || 'confirmação não apareceu' }; }
+    var corpo2 = dmCorpo(f2);
+    var go = f2.querySelector('#troop_confirm_go, input[type="submit"]');
+    if (go && go.name) { corpo2.set(go.name, go.value || '1'); }
+    var url2 = new URL(f2.getAttribute('action') || url1, location.href).href;
+    var doc3 = dmDoc(await (await fetch(url2, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: corpo2.toString() })).text());
+    if (dmCaptcha(doc3)) { return { captcha: true }; }
+    var e3 = dmErro(doc3);
+    if (e3) { return { erro: e3 }; }
+    return { ok: true };
+  }
+  // um ciclo: lê os alvos, escolhe a aldeia mais perto de cada um dentro do raio, manda 1 ataque por alvo
+  async function dmCiclo() {
+    if (dmRodando) { return; }
+    var cfg = dmLer();
+    if (!cfg.ativo) { return; }
+    if (!window.game_data || !game_data.village) { dmLog('abra uma aldeia sua pra começar.'); return; }
+    if (!dmSouDono()) { dmLog('outra aba está rodando o demolidor.'); return; }
+    dmRodando = true; dmParando = false; dmBolinha(true);
+    try {
+      dmStatus('lendo aldeias e alvos...');
+      var minhas = await dmMinhasAldeias();
+      var minhasKeys = new Set(minhas.map(function (m) { return m.k; }));
+      var alvos = await dmAlvos(minhasKeys);
+      var porAlvo = Math.max(1, parseInt(cfg.porAlvo, 10) || 1);
+      var fila = [];
+      alvos.forEach(function (a) {
+        var cands = [];
+        minhas.forEach(function (m) { var d = Math.hypot(m.x - a.x, m.y - a.y); if (d <= cfg.raio) { cands.push({ origem: m.id, d: d }); } });
+        cands.sort(function (p, q) { return p.d - q.d; });
+        cands.slice(0, porAlvo).forEach(function (c) { fila.push({ origem: c.origem, alvo: a, d: c.d }); });
+      });
+      fila.sort(function (p, q) { return p.d - q.d; });
+      fila = fila.slice(0, cfg.maxPorCiclo);
+      dmLog(alvos.length + ' bárbaras lidas, ' + fila.length + ' dentro de ' + cfg.raio + ' campos de alguma aldeia sua.');
+      var falhas = {}, enviados = 0;
+      for (var i = 0; i < fila.length && !dmParando; i++) {
+        if (!dmLer().ativo) { break; }
+        while (window.__ORK_CAPTCHA_BLOQUEADO__) { await gerEsperar(gerEntre(3000, 5000)); }
+        var it = fila[i];
+        if (!dmSouDono()) { dmLog('outra aba assumiu o demolidor. Parando aqui.'); break; }
+        if ((falhas[it.origem] || 0) >= 3) { continue; }
+        dmStatus('atacando ' + (i + 1) + '/' + fila.length);
+        var r = await dmEnviar(it.origem, it.alvo, cfg.tropas, cfg.catRandom);
+        if (r.captcha) { dmLog('captcha apareceu — resolva e ligue de novo.'); cfg.ativo = false; dmGravar(cfg); break; }
+        if (r.erro) { falhas[it.origem] = (falhas[it.origem] || 0) + 1; dmLog(it.alvo.k + ' (de ' + it.origem + '): ' + r.erro); }
+        else { enviados++; dmLog('✔ ataque em ' + it.alvo.k + ' saiu da aldeia ' + it.origem + '.'); }
+        await gerEsperar(gerEntre(1500, 2500) / (parseFloat(cfg.velocidade) || 1));
+      }
+      cfg = dmLer();
+      cfg.ciclos = (cfg.ciclos || 0) + 1;
+      dmGravar(cfg);
+      dmLog('ciclo ' + cfg.ciclos + ' terminou: ' + enviados + ' ataques enviados.');
+      if (cfg.ativo && !dmParando) {
+        var espera = Math.max(1, parseFloat(cfg.intervaloMin) || 30) * 60000;
+        dmStatus('próximo ciclo em ' + Math.round(espera / 60000) + ' min');
+        dmTimer = setTimeout(dmCiclo, espera);
+      } else { dmStatus('Parado'); }
+    } catch (e) {
+      dmLog('erro: ' + (e && e.message ? e.message : e));
+      dmStatus('Parado por erro');
+    } finally { dmRodando = false; }
+  }
+  function dmParar() {
+    var cfg = dmLer(); cfg.ativo = false; dmGravar(cfg);
+    dmParando = true; if (dmTimer) { clearTimeout(dmTimer); dmTimer = null; }
+    dmStatus('Parado'); dmLog('parado.'); dmBolinha(false);
+  }
+  function dmAtualizarUI() {
+    var cfg = dmLer(), q = function (id) { return document.getElementById(id); };
+    if (!q('dm-raio')) { return; }
+    q('dm-raio').value = cfg.raio; q('dm-int').value = cfg.intervaloMin; q('dm-max').value = cfg.maxPorCiclo;
+    q('dm-vel').value = String(cfg.velocidade);
+    if (q('dm-por')) { q('dm-por').value = cfg.porAlvo || 1; q('dm-catrand').checked = !!cfg.catRandom; }
+    document.querySelectorAll('#ork-dm-popup [data-u]').forEach(function (el) { el.value = parseInt((cfg.tropas || {})[el.getAttribute('data-u')], 10) || 0; });
+  }
+  function dmLerUI() {
+    var q = function (id) { return document.getElementById(id); }, tropas = {};
+    document.querySelectorAll('#ork-dm-popup [data-u]').forEach(function (el) { tropas[el.getAttribute('data-u')] = Math.max(0, parseInt(el.value, 10) || 0); });
+    var cfg = dmLer();
+    cfg.raio = Math.max(1, parseFloat(q('dm-raio').value) || DM_PADRAO.raio);
+    cfg.intervaloMin = Math.max(1, parseFloat(q('dm-int').value) || DM_PADRAO.intervaloMin);
+    cfg.maxPorCiclo = Math.max(1, parseInt(q('dm-max').value, 10) || DM_PADRAO.maxPorCiclo);
+    cfg.velocidade = parseFloat(q('dm-vel').value) || 1;
+    cfg.porAlvo = Math.max(1, parseInt(q('dm-por').value, 10) || 1);
+    cfg.catRandom = !!q('dm-catrand').checked;
+    cfg.tropas = tropas;
+    return cfg;
+  }
+  // v245: solta a trava ao sair da página (senão a página nova achava que outra aba estava rodando)
+  window.addEventListener('pagehide', function () {
+    try { var kP = 'ork_dm_dono_' + ((window.game_data && game_data.world) || ''); var dP = JSON.parse(localStorage.getItem(kP) || 'null'); if (dP && dP.id === DM_ID) { localStorage.removeItem(kP); } } catch (e) {}
+  });
+  // v245: retoma sozinho ao carregar (como o agendador). Se a trava ainda estiver com outra página, tenta de novo a cada 10 s (até ~10 min).
+  (function dmRetomarAuto(tent) {
+    if (!(dmLer().ativo && window.game_data && game_data.village)) { return; }
+    if (dmSouDono()) {
+      dmBolinha(true); dmStatus('retomando...'); dmLog('retomando sozinho depois de recarregar a página.');
+      setTimeout(dmCiclo, 5000);
+      return;
+    }
+    dmBolinha(true); dmStatus('aguardando outra aba soltar o demolidor...');
+    if (tent < 60) { setTimeout(function () { dmRetomarAuto(tent + 1); }, 10000); }
+  })(0);
+  function dmAbrir() {
+    var el = document.getElementById('ork-dm-popup');
+    if (el) { el.style.display = 'block'; dmAtualizarUI(); return; }
+    el = document.createElement('div');
+    el.id = 'ork-dm-popup';
+    el.style.cssText = 'position:fixed;top:70px;right:20px;width:330px;max-height:85vh;overflow:auto;background:#1a1a1a;color:#eee;border:1px solid #3a3a3a;border-radius:10px;padding:10px;z-index:999999;font:12px "Segoe UI",Arial,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.7)';
+    var campo = 'background:#111;color:#eee;border:1px solid #444;border-radius:5px;padding:3px 5px;width:80px';
+    var tropasHtml = dmUnidades().map(function (u) {
+      return '<label style="display:flex;justify-content:space-between;align-items:center;margin:2px 0">' + DM_NOMES[u] + ' <input type="number" min="0" data-u="' + u + '" style="' + campo + '"></label>';
+    }).join('');
+    el.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="color:#FFC400;font-size:13px">🧱 Demolir de Muralhas</b><span id="dm-x" style="cursor:pointer;font-size:16px">&times;</span></div>' +
+      '<div style="color:#999;font-size:10.5px;margin-bottom:8px">Manda a tropa abaixo pras bárbaras num raio em volta de cada aldeia sua, pra derrubar as muralhas.</div>' +
+      '<div style="font-size:10px;color:#888;font-weight:800;text-transform:uppercase;margin-bottom:3px">Alvos e ritmo</div>' +
+      '<label style="display:flex;justify-content:space-between;align-items:center;margin:2px 0">Raio (campos) <input type="number" id="dm-raio" min="1" style="' + campo + '"></label>' +
+      '<label style="display:flex;justify-content:space-between;align-items:center;margin:2px 0">Intervalo entre ciclos (min) <input type="number" id="dm-int" min="1" style="' + campo + '"></label>' +
+      '<label style="display:flex;justify-content:space-between;align-items:center;margin:2px 0">Máx. ataques por ciclo <input type="number" id="dm-max" min="1" style="' + campo + '"></label>' +
+      '<label style="display:flex;justify-content:space-between;align-items:center;margin:2px 0">Ataques por aldeia do oponente <input type="number" id="dm-por" min="1" style="' + campo + '"></label>' +
+      '<label style="display:flex;justify-content:space-between;align-items:center;margin:2px 0">Catapultas em alvo aleatório <input type="checkbox" id="dm-catrand"></label>' +
+      '<label style="display:flex;justify-content:space-between;align-items:center;margin:2px 0">Velocidade <select id="dm-vel" style="' + campo + '"><option value="0.5">0.5x</option><option value="1">1x</option><option value="1.5">1.5x</option><option value="2">2x</option></select></label>' +
+      '<div style="font-size:10px;color:#888;font-weight:800;text-transform:uppercase;margin:8px 0 3px">Tropas por ataque</div>' + tropasHtml +
+      '<div style="display:flex;gap:6px;margin-top:10px"><button id="dm-salvar" style="flex:1;padding:6px;border:0;border-radius:6px;background:#2a2a2a;color:#FFC400;cursor:pointer">💾 Salvar</button><button id="dm-ligar" style="flex:1;padding:6px;border:0;border-radius:6px;background:linear-gradient(100deg,#FFB800,#FFDD55);color:#141200;font-weight:800;cursor:pointer">▶ Ligar</button><button id="dm-parar" style="flex:1;padding:6px;border:0;border-radius:6px;background:#2a1010;color:#ff6b6b;cursor:pointer">⏹ Parar</button></div>' +
+      '<div id="dm-status" style="margin-top:8px;font-weight:800;color:#FFC400">Parado</div>' +
+      '<div id="dm-log" style="margin-top:6px;max-height:180px;overflow:auto;font-size:10.5px;color:#bbb;background:#111;border-radius:6px;padding:6px"></div>';
+    document.body.appendChild(el);
+    dmAtualizarUI();
+    var cfgAtual = dmLer();
+    dmStatus(cfgAtual.ativo ? 'ligado' : 'Parado');
+    document.getElementById('dm-x').addEventListener('click', function () { el.style.display = 'none'; });
+    document.getElementById('dm-salvar').addEventListener('click', function () { var c = dmLerUI(); c.ativo = dmLer().ativo; dmGravar(c); dmLog('configuração salva.'); });
+    document.getElementById('dm-ligar').addEventListener('click', function () {
+      var c = dmLerUI(); c.ativo = true; dmGravar(c); dmParando = false;
+      if (!dmRodando) { dmLog('ligado: ' + Object.keys(c.tropas).filter(function (u) { return c.tropas[u] > 0; }).map(function (u) { return c.tropas[u] + ' ' + DM_NOMES[u]; }).join(', ') + ' — raio ' + c.raio + '.'); dmCiclo(); }
+    });
+    document.getElementById('dm-parar').addEventListener('click', dmParar);
+  }
+
   var FERRAMENTAS = [
     {
       id: 'farmar',
@@ -22269,6 +23137,16 @@
     }
 ,
     {
+      id: 'n4',
+      nome: 'N4 — Automático',
+      abrev: 'N4 Automático',
+      icone: '⚡',
+      dica: 'Preset automático com a sua setagem: Farm Hard (2x, 4 grupos, 1 aba), Construtor no modelo do GC (fila 5, 1 min), Recrutador (Ataque ou Defesa), Coletor Hard, Pesquisa em Massa (a cada 3 min), Cunhagem (3 min) e Noblar de bárbaras (ciclo 22s).',
+      checar: checaN4,
+      rodar: rodarN4,
+      destino: null
+    },
+    {
       id: 'n9',
       nome: 'N9 — Conquistadores',
       abrev: 'N9 Conquistadores',
@@ -22440,14 +23318,25 @@
       rodar: rodarAgendador,
       destino: null
     }
+    ,
+    {
+      id: 'demolir',
+      nome: 'Demolir de Muralhas',
+      abrev: 'Demolir Muralhas',
+      icone: '🧱',
+      dica: 'Manda a tropa que você escolher (ex.: 250 Bárbaro + 25 Ariete + 1 Explorador) pras bárbaras num raio em volta de cada aldeia sua, pra derrubar as muralhas e melhorar o farm.',
+      checar: function () { return true; },
+      rodar: function () { dmAbrir(); },
+      destino: null
+    }
   ];
 
   var ORK_SECOES = [
-    ['🌾 Farm', ['farmar', 'farmdormindo', 'keypress', 'coletorhard', 'coletorfarm']],
+    ['🌾 Farm', ['farmar', 'farmdormindo', 'keypress', 'coletorhard', 'coletorfarm', 'demolir']],
     ['⚔️ Ataque e nobres', ['ataque', 'desviar', 'nobrebb', 'noblaplayer', 'nobmassa', 'etiquetador', 'snipe', 'agendador', 'defender']],
     ['🗺️ Coleta', ['coleta', 'barbaras', 'perfil', 'coletarank', 'separador', 'ocultar']],
     ['🏰 Conta', ['gerente', 'recrutador', 'consind', 'mercadopp', 'pesqmassa', 'construcao', 'recacademia', 'balanceador', 'cunhar', 'rename', 'privacidade', 'cancelar']],
-    ['⚡ Automações Speeds', ['n0n1', 'n9', 'auto247']]
+    ['⚡ Automações Speeds', ['n0n1', 'n9', 'n4', 'auto247']]
   ];
   var FERRAMENTAS_POR_ID = {};
   FERRAMENTAS.forEach(function (f) { FERRAMENTAS_POR_ID[f.id] = f; });
@@ -23227,14 +24116,14 @@
   // v204: bolinha do sincronizador — aparece em qualquer tela mostrando quantos saíram e quantos faltam
   function amxBolinha(rem, total) {
     try {
-      var b = document.getElementById('ork-amx-bolinha');
+      var b = document.getElementById('ork-sync-bolinha');
       if (!rem) { if (b) { b.remove(); } return; }
       if (!document.body) { return; }
       var sent = Math.max(0, (total || 0) - rem);
       if (!b) {
-        b = document.createElement('div'); b.id = 'ork-amx-bolinha';
+        b = document.createElement('div'); b.id = 'ork-sync-bolinha';
         b.title = 'Ataques sincronizados na fila — saem no horário programado, mesmo trocando de tela/F5/captcha.';
-        b.style.cssText = 'position:fixed;left:10px;bottom:120px;z-index:2147483000;background:linear-gradient(160deg,#1a1a1a,#050505);border:1px solid #8a6d00;color:#FFC400;font:700 11.5px "Segoe UI",Arial,sans-serif;padding:7px 11px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,.6);white-space:nowrap;pointer-events:auto';
+        b.style.cssText = 'position:fixed;left:10px;bottom:170px;z-index:2147483600;background:linear-gradient(160deg,#1a1a1a,#050505);border:1px solid #8a6d00;color:#FFC400;font:700 11.5px "Segoe UI",Arial,sans-serif;padding:7px 11px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,.6);white-space:nowrap;pointer-events:auto';
         document.body.appendChild(b);
       }
       var txt = b.querySelector('.amx-bt'), bt = b.querySelector('.amx-canc');
