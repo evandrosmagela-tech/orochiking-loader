@@ -280,7 +280,7 @@
      rodando — sem depender de adivinhar se o GitHub já propagou.
      No Console (F12) digite:  __ORK_VERSAO__
   ============================================================ */
-  window.__ORK_VERSAO__ = 252;
+  window.__ORK_VERSAO__ = 253;
   try { localStorage.removeItem('Alvos_Muralha'); } catch (e) {} // v83: lista antiga do Farm Hard que só crescia
 
   /* ============================================================
@@ -359,6 +359,15 @@
   })();
 
   var ORK_NOVIDADES = [
+    {
+      id: '2026-11-23-v253',
+      data: '23/11/2026',
+      titulo: '🛡️ Desvio automático e ajustes no KeyPress',
+      itens: [
+        '🤖 Desviar Tropas: novo desvio automático — confere de tempos em tempos (seg ou min) e desvia sozinho as aldeias que estão sob ataque.',
+        '📈 KeyPress (aumentar o farm sozinho): agora o tempo pode ser em segundos ou minutos (mín. 1 min) e o explorador nunca é aumentado.'
+      ]
+    },
     {
       id: '2026-11-22-v252',
       data: '22/11/2026',
@@ -10623,7 +10632,7 @@
       if (!quais[letra]) { return; }
       tr.querySelectorAll('input[type="text"], input[type="number"]').forEach(function (inp) {
         var chave = (inp.name || '').split('[')[0];
-        if (KP_UNIDADES.indexOf(chave) === -1) { return; } // nunca mexe no nobre (não está na lista)
+        if (KP_UNIDADES.indexOf(chave) === -1 || chave === 'spy') { return; } // nunca mexe no nobre (não está na lista) nem no explorador (spy)
         var v = parseInt(inp.value || '0', 10) || 0;
         if (v <= 0) { return; }                            // só aumenta as unidades que JÁ existem no modelo
         var nv = Math.round(v * passo); if (nv <= v) { nv = v + 1; }
@@ -10653,7 +10662,8 @@
     var pct = ch * 100 / tot;
     if (pct < (cfg.autoPctCheias || 60)) { return; }
     var agora = Date.now();
-    if (cfg.autoUltimo && (agora - cfg.autoUltimo) < (cfg.autoIntervaloMin || 60) * 60000) { return; }
+    var intAutoMs = Math.max(60000, cfg.autoIntervaloMs != null ? +cfg.autoIntervaloMs : (cfg.autoIntervaloMin || 60) * 60000); // v253: mín. 60s
+    if (cfg.autoUltimo && (agora - cfg.autoUltimo) < intAutoMs) { return; }
     try {
       var res = await kpAumentarModelos(cfg);
       if (res.ok) {
@@ -10981,8 +10991,8 @@
           '<div id="ork-kp-auto-corpo" style="margin-top:8px">' +
             '<div style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:#bbb;margin-bottom:6px">Quando <input id="ork-kp-auto-pct" type="number" min="1" max="100" style="width:48px;background:#111;border:1px solid #444;color:#eee;padding:4px 5px;border-radius:5px;text-align:center;font-size:11px;box-sizing:border-box">% voltarem <b style="color:#ccc">cheias</b></div>' +
             '<div style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:#bbb;margin-bottom:6px">aumenta <input id="ork-kp-auto-passo" type="number" min="1" style="width:48px;background:#111;border:1px solid #444;color:#eee;padding:4px 5px;border-radius:5px;text-align:center;font-size:11px;box-sizing:border-box">% · teto/unid. <input id="ork-kp-auto-teto" type="number" min="0" placeholder="—" data-dica="Valor máximo que cada unidade pode chegar no modelo. Vazio = sem limite (cuidado: pode crescer demais)." style="width:66px;background:#111;border:1px solid #444;color:#eee;padding:4px 5px;border-radius:5px;text-align:center;font-size:11px;box-sizing:border-box"></div>' +
-            '<div style="display:flex;align-items:center;gap:8px;font-size:10.5px;color:#bbb">a cada <input id="ork-kp-auto-int" type="number" min="5" style="width:52px;background:#111;border:1px solid #444;color:#eee;padding:4px 5px;border-radius:5px;text-align:center;font-size:11px;box-sizing:border-box"> min · <label style="cursor:pointer;display:flex;align-items:center;gap:3px"><input id="ork-kp-auto-a" type="checkbox"> A</label> <label style="cursor:pointer;display:flex;align-items:center;gap:3px"><input id="ork-kp-auto-b" type="checkbox"> B</label></div>' +
-            '<div style="font-size:9px;color:#666;margin-top:5px">Só mexe nas unidades que já existem no modelo. Teto vazio = sem limite.</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;font-size:10.5px;color:#bbb">a cada <input id="ork-kp-auto-int" type="number" min="1" style="width:52px;background:#111;border:1px solid #444;color:#eee;padding:4px 5px;border-radius:5px;text-align:center;font-size:11px;box-sizing:border-box"> <select id="ork-kp-auto-un" style="background:#111;border:1px solid #444;color:#eee;padding:4px 3px;border-radius:5px;font-size:11px"><option value="min">min</option><option value="seg">seg</option></select> · <label style="cursor:pointer;display:flex;align-items:center;gap:3px"><input id="ork-kp-auto-a" type="checkbox"> A</label> <label style="cursor:pointer;display:flex;align-items:center;gap:3px"><input id="ork-kp-auto-b" type="checkbox"> B</label></div>' +
+            '<div style="font-size:9px;color:#666;margin-top:5px">Só mexe nas unidades que já existem no modelo (nunca no explorador). Mínimo 1 min. Teto vazio = sem limite.</div>' +
           '</div>' +
         '</div>' +
         '<div style="display:flex;gap:8px">' +
@@ -11007,7 +11017,7 @@
     document.getElementById('ork-kp-auto-pct').value = cfg.autoPctCheias != null ? cfg.autoPctCheias : 60;
     document.getElementById('ork-kp-auto-passo').value = cfg.autoPasso != null ? cfg.autoPasso : 10;
     document.getElementById('ork-kp-auto-teto').value = (cfg.autoTeto == null || cfg.autoTeto === '') ? '' : cfg.autoTeto;
-    document.getElementById('ork-kp-auto-int').value = cfg.autoIntervaloMin != null ? cfg.autoIntervaloMin : 60;
+    (function () { var ms = Math.max(60000, cfg.autoIntervaloMs != null ? +cfg.autoIntervaloMs : (cfg.autoIntervaloMin != null ? cfg.autoIntervaloMin : 60) * 60000); var emM = (ms % 60000 === 0); document.getElementById('ork-kp-auto-un').value = emM ? 'min' : 'seg'; document.getElementById('ork-kp-auto-int').value = emM ? ms / 60000 : Math.round(ms / 1000); })();
     document.getElementById('ork-kp-auto-a').checked = !cfg.autoModelos || cfg.autoModelos.a !== false;
     document.getElementById('ork-kp-auto-b').checked = !cfg.autoModelos || cfg.autoModelos.b !== false;
     function pintarAuto() {
@@ -11058,7 +11068,7 @@
         autoTropa: auto, autoPctCheias: Math.max(1, Math.min(100, parseInt(document.getElementById('ork-kp-auto-pct').value, 10) || 60)),
         autoPasso: Math.max(1, parseInt(document.getElementById('ork-kp-auto-passo').value, 10) || 10),
         autoTeto: lv('ork-kp-auto-teto'),
-        autoIntervaloMin: Math.max(5, parseInt(document.getElementById('ork-kp-auto-int').value, 10) || 60),
+        autoIntervaloMs: (function () { var v = parseFloat(document.getElementById('ork-kp-auto-int').value) || 60; var seg = document.getElementById('ork-kp-auto-un').value === 'seg'; return Math.max(60000, Math.round(seg ? v * 1000 : v * 60000)); })(),
         autoModelos: { a: document.getElementById('ork-kp-auto-a').checked, b: document.getElementById('ork-kp-auto-b').checked },
         autoUltimo: cfgAnt.autoUltimo || 0 });
       fechar();
@@ -22142,7 +22152,7 @@
   var DT_CHAVE = 'ork_desviar_' + ((window.game_data && game_data.world) || '');
   var dtParar = false, dtRodando = false;
   function dtLer() {
-    var p = { modo: 'apoiar1', alvoCoord: '', coordsColadas: '' };
+    var p = { modo: 'apoiar1', alvoCoord: '', coordsColadas: '', autoAtivo: false, autoValor: 1, autoUnidade: 'min' };
     try { var c = JSON.parse(localStorage.getItem(DT_CHAVE) || 'null'); if (c && typeof c === 'object') { for (var k in c) { p[k] = c[k]; } } } catch (e) {}
     return p;
   }
@@ -22158,7 +22168,9 @@
     for (var i = 0; i < lista.length; i++) { var d = dtDist(origem, lista[i]); if (d < md) { md = d; melhor = lista[i]; } }
     return melhor;
   }
-  async function dtMapa() {
+  var dtMapaCache = null;
+  async function dtMapa(usarCache) {
+    if (usarCache && dtMapaCache && Date.now() - dtMapaCache.t < 20 * 60000) { return dtMapaCache.v; } // v253: no automático não baixa o mapa todo toda hora
     var txtV = await colRankFetchMapa('/map/village.txt');
     if (!txtV) { throw new Error('não consegui ler o mapa do mundo (village.txt).'); }
     var meu = String((window.game_data && game_data.player && game_data.player.id) || 0);
@@ -22172,7 +22184,9 @@
       if (dono === meu) { minhas.push(o); meuId[id] = 1; }
       else if (dono === '0') { barbaras.push(o); }
     });
-    return { minhas: minhas, idx: idx, barbaras: barbaras, meuId: meuId };
+    var resMapa = { minhas: minhas, idx: idx, barbaras: barbaras, meuId: meuId };
+    dtMapaCache = { t: Date.now(), v: resMapa };
+    return resMapa;
   }
   // devolve { coord -> maior horário de chegada (ms) } das aldeias minhas sob ataque
   async function dtSobAtaque() {
@@ -22216,7 +22230,45 @@
     try { var cmd = await snpAcharComando(origemId, alvo.x + '|' + alvo.y, null); if (cmd && cmd.cancelUrl) { await fetch(cmd.cancelUrl, { credentials: 'include' }); return true; } } catch (e) {}
     return false;
   }
-  function dtRodar(somenteSobAtaque, status) {
+  // v253: cancelamentos agendados ficam salvos (a página recarrega e o setTimeout se perderia)
+  var DT_CANC = DT_CHAVE + '_canc';
+  function dtCancLer() { try { var l = JSON.parse(localStorage.getItem(DT_CANC) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+  function dtCancGravar(l) { try { localStorage.setItem(DT_CANC, JSON.stringify(l)); } catch (e) {} }
+  function dtCancelPendente(origemId, alvo, quando) { var l = dtCancLer(); l.push({ o: origemId, x: alvo.x, y: alvo.y, q: quando }); dtCancGravar(l); }
+  function dtCancTick() {
+    var l = dtCancLer(); if (!l.length) { return; }
+    var agora = Date.now(), vencidos = l.filter(function (c) { return c.q <= agora; });
+    if (!vencidos.length) { return; }
+    dtCancGravar(l.filter(function (c) { return c.q > agora; })); // tira da lista ANTES de executar (outra aba não repete)
+    vencidos.forEach(function (c, k) { setTimeout(function () { dtCancelar(c.o, { x: c.x, y: c.y }); }, k * 700); });
+  }
+  setInterval(dtCancTick, 3000);
+
+  // v253: DESVIO AUTOMÁTICO — confere a cada X seg/min se alguma aldeia está sob ataque e desvia sozinho
+  var DT_ULT = DT_CHAVE + '_ult';
+  function dtAutoMs(c) { var v = parseFloat(c.autoValor); if (!(v > 0)) { v = 1; } return Math.max(10000, Math.round(c.autoUnidade === 'seg' ? v * 1000 : v * 60000)); }
+  function dtAutoLog(t) { try { var s = document.getElementById('dt-stt'); if (s) { s.textContent = t; } } catch (e) {} if (/^✔|^erro|^⏹/.test(t)) { console.log('[OROCHIKING] Desviar (auto): ' + t); } }
+  async function dtAutoTick() {
+    var c = dtLer();
+    if (!c.autoAtivo || dtRodando) { return; }
+    if (window.__ORK_LICENCA_OK__ === false || window.__ORK_CAPTCHA_BLOQUEADO__) { return; }
+    var agora = Date.now(), ult = 0; try { ult = +localStorage.getItem(DT_ULT) || 0; } catch (e) {}
+    if (agora - ult < dtAutoMs(c)) { return; }         // outra aba (ou esta) já conferiu há pouco
+    try { localStorage.setItem(DT_ULT, String(agora)); } catch (e) {}
+    try {
+      var sob = await dtSobAtaque();
+      if (!Object.keys(sob).length) { return; }          // ninguém sob ataque: não faz mais nada
+      dtRodar(true, dtAutoLog, true);
+    } catch (e) { console.warn('[OROCHIKING] Desviar (auto):', e); }
+  }
+  function dtAutoIniciar() {
+    if (window.__ORK_DT_AUTO__) { return; }
+    window.__ORK_DT_AUTO__ = true;
+    setInterval(function () { dtAutoTick(); }, 5000);
+  }
+  dtAutoIniciar();
+
+  function dtRodar(somenteSobAtaque, status, auto) {
     if (dtRodando) { status('já está rodando…'); return; }
     dtRodando = true; dtParar = false;
     var c = dtLer();
@@ -22225,7 +22277,7 @@
     (async function () {
       try {
         status('lendo o mapa do mundo…');
-        var mapa = await dtMapa();
+        var mapa = await dtMapa(!!auto);
         if (!mapa.minhas.length) { status('não achei suas aldeias no mapa (village.txt). Tente de novo em instantes.'); dtRodando = false; return; }
         var fontes = mapa.minhas;
         if (somenteSobAtaque) {
@@ -22236,6 +22288,7 @@
         }
         var alvos = dtParseCoords(c.alvoCoord);
         var alvoUnico = alvos.length ? mapa.idx[alvos[0].x + '|' + alvos[0].y] : null;
+        if (c.modo === 'apoiar1' && alvoUnico) { fontes = fontes.filter(function (o) { return o.id !== alvoUnico.id; }); if (!fontes.length) { status('só a aldeia de destino está sob ataque — nada a desviar.'); dtRodando = false; return; } }
         var coordsApoio = dtParseCoords(c.coordsColadas).map(function (p) { return mapa.idx[p.x + '|' + p.y]; }).filter(Boolean);
         if (c.modo === 'apoiar1' && !alvoUnico) { status('não achei essa coordenada no mapa. Confira a aldeia que vai receber o apoio.'); dtRodando = false; return; }
         if (c.modo === 'apoiarcoords' && !coordsApoio.length) { status('não achei as coordenadas que você colou no mapa.'); dtRodando = false; return; }
@@ -22256,7 +22309,7 @@
           } else {
             waitMs = 4000 + Math.floor(Math.random() * 3000); // pré-ventivo (TODAS): volta rápido
           }
-          setTimeout(function () { dtCancelar(origem.id, alvo); }, waitMs);
+          dtCancelPendente(origem.id, alvo, Date.now() + waitMs); // v253: guardado, sobrevive a recarregar a página
         }
         var ok = 0, fail = 0, semTropa = 0, done = 0, i = 0, ativos = 0, LIM = 4, totalF = fontes.length;
         function pint() { status('enviando… ' + ok + ' ok' + (semTropa ? ' · ' + semTropa + ' sem tropa' : '') + (fail ? ' · ' + fail + ' falha' : '') + ' (de ' + totalF + ')'); }
@@ -22306,6 +22359,13 @@
       if (c.modo === 'apoiar1') { campo = '<input id="dt-alvo" type="text" value="' + (c.alvoCoord || '') + '" placeholder="coord da SUA aldeia que vai receber o apoio (ex.: 500|500)" style="' + inp + '">'; }
       else if (c.modo === 'atacar' || c.modo === 'cancelar') { campo = '<input id="dt-alvo" type="text" value="' + (c.alvoCoord || '') + '" placeholder="alvo (ex.: 505|505) — vazio = bárbara mais perto de cada aldeia" style="' + inp + '">'; }
       else if (c.modo === 'apoiarcoords') { campo = '<textarea id="dt-coords" placeholder="coords (uma por linha ou por vírgula) — aldeias suas/aliadas" style="' + inp + ';min-height:58px">' + (c.coordsColadas || '') + '</textarea>'; }
+      var dicas = {
+        apoiar1: '📍 <b>Coordenada obrigatória.</b> TODAS as aldeias mandam o apoio para essa aldeia sua. O painel não escolhe a aldeia sozinho. A própria aldeia de destino não desvia.',
+        atacar: '📍 <b>Coordenada opcional.</b> Preenchida: todas atacam esse alvo. Vazia: cada aldeia ataca a <b>bárbara mais próxima dela</b>. O nobre fica em casa.',
+        cancelar: '📍 <b>Coordenada opcional.</b> Preenchida: todas atacam esse alvo. Vazia: cada aldeia ataca a <b>bárbara mais próxima dela</b>. A tropa volta depois do ataque bater.',
+        apoiarcoords: '📍 <b>Cole ao menos uma coordenada.</b> Cada aldeia manda o apoio para a <b>mais próxima da sua lista</b>.'
+      };
+      var dica = dicas[c.modo] || '';
       box.innerHTML =
         '<div class="hd" id="dt-hd"><span>🛡️</span><span class="t">Desviar Tropas</span><span class="x" id="dt-x">✕</span></div>' +
         '<div class="bd">' +
@@ -22317,15 +22377,42 @@
           radio('cancelar', '⚔️ Atacar e cancelar (volta rápido)') +
           radio('apoiarcoords', '🤝 Apoiar coordenadas que eu colar') +
           campo +
+          '<div style="font-size:10px;color:#9a9a9a;margin-top:6px;line-height:1.45">' + dica + '</div>' +
+          '<div class="sec">DESVIO AUTOMÁTICO</div>' +
+          '<div style="border:1px solid #3a3a3a;border-radius:8px;padding:8px 10px;background:#0d0d0d">' +
+            '<label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:#ddd;font-weight:700"><input id="dt-auto" type="checkbox"' + (c.autoAtivo ? ' checked' : '') + '> 🤖 Desviar sozinho quando tomar ataque</label>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;color:#bbb">Conferir a cada ' +
+              '<input id="dt-auto-v" type="number" min="1" value="' + (c.autoValor || 1) + '" style="width:56px;background:#111;border:1px solid #444;color:#eee;padding:4px 5px;border-radius:5px;text-align:center;font-size:11px;box-sizing:border-box"> ' +
+              '<select id="dt-auto-u" style="background:#111;border:1px solid #444;color:#eee;padding:4px 4px;border-radius:5px;font-size:11px"><option value="min"' + (c.autoUnidade === 'seg' ? '' : ' selected') + '>minutos</option><option value="seg"' + (c.autoUnidade === 'seg' ? ' selected' : '') + '>segundos</option></select></div>' +
+            '<div style="font-size:9.5px;color:#777;margin-top:5px">Usa o modo escolhido acima, só nas aldeias sob ataque. Mínimo 10 s. Funciona em qualquer tela do jogo, com o jogo aberto. No "atacar e cancelar" o cancelamento fica salvo e acontece mesmo se a página recarregar.</div>' +
+          '</div>' +
           '<div class="sec">DESVIAR AGORA</div>' +
           '<button class="ligar" id="dt-sob" style="background:linear-gradient(100deg,#ff7a3d,#ff9d3d);color:#1a0d00">🚨 Desviar as que estão SOB ATAQUE</button>' +
           '<button class="setar" id="dt-todas" style="margin-top:7px">💨 Desviar TODAS as aldeias</button>' +
           '<div class="ft"><button class="parar" id="dt-parar">⏹ Parar</button><button class="fechar" id="dt-fechar">Fechar</button></div>' +
-          '<div class="stt" id="dt-stt" style="color:#8a8a8a">pronto.</div>' +
+          '<div class="stt" id="dt-stt" style="color:#8a8a8a">' + (c.autoAtivo ? '🤖 automático ligado.' : 'pronto.') + '</div>' +
         '</div>';
       box.querySelectorAll('.row[data-mo]').forEach(function (r) { r.addEventListener('click', function () { var n = dtLer(); n.modo = r.getAttribute('data-mo'); dtGravar(n); desenhar(); }); });
       var ca = box.querySelector('#dt-alvo'); if (ca) { ca.addEventListener('change', function () { var n = dtLer(); n.alvoCoord = ca.value; dtGravar(n); }); ca.addEventListener('blur', function () { var n = dtLer(); n.alvoCoord = ca.value; dtGravar(n); }); }
       var cc = box.querySelector('#dt-coords'); if (cc) { cc.addEventListener('change', function () { var n = dtLer(); n.coordsColadas = cc.value; dtGravar(n); }); cc.addEventListener('blur', function () { var n = dtLer(); n.coordsColadas = cc.value; dtGravar(n); }); }
+      function salvarAuto() {
+        var n = dtLer(), v = parseFloat(box.querySelector('#dt-auto-v').value);
+        n.autoValor = (v > 0) ? v : 1; n.autoUnidade = box.querySelector('#dt-auto-u').value;
+        if (dtAutoMs(n) !== (n.autoUnidade === 'seg' ? n.autoValor * 1000 : n.autoValor * 60000)) { n.autoValor = 10; n.autoUnidade = 'seg'; box.querySelector('#dt-auto-v').value = 10; box.querySelector('#dt-auto-u').value = 'seg'; } // mínimo 10 s
+        dtGravar(n); return n;
+      }
+      box.querySelector('#dt-auto-v').addEventListener('change', salvarAuto);
+      box.querySelector('#dt-auto-u').addEventListener('change', salvarAuto);
+      box.querySelector('#dt-auto').addEventListener('change', function () {
+        var n = salvarAuto(), chk = this;
+        if (chk.checked) {
+          if (n.modo === 'apoiar1' && !dtParseCoords(n.alvoCoord).length) { chk.checked = false; st('informe a coordenada da sua aldeia antes de ligar o automático.'); return; }
+          if (n.modo === 'apoiarcoords' && !dtParseCoords(n.coordsColadas).length) { chk.checked = false; st('cole ao menos uma coordenada antes de ligar o automático.'); return; }
+        }
+        n.autoAtivo = chk.checked; dtGravar(n);
+        try { localStorage.removeItem(DT_ULT); } catch (e) {}
+        st(chk.checked ? '🤖 automático LIGADO — conferindo a cada ' + n.autoValor + (n.autoUnidade === 'seg' ? ' s' : ' min') + '.' : 'automático desligado.');
+      });
       box.querySelector('#dt-x').addEventListener('click', function () { ov.remove(); });
       box.querySelector('#dt-fechar').addEventListener('click', function () { ov.remove(); });
       box.querySelector('#dt-parar').addEventListener('click', function () { dtParar = true; st('parando…'); });
