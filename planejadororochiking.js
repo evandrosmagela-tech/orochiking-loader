@@ -280,7 +280,7 @@
      rodando — sem depender de adivinhar se o GitHub já propagou.
      No Console (F12) digite:  __ORK_VERSAO__
   ============================================================ */
-  window.__ORK_VERSAO__ = 253;
+  window.__ORK_VERSAO__ = 254;
   try { localStorage.removeItem('Alvos_Muralha'); } catch (e) {} // v83: lista antiga do Farm Hard que só crescia
 
   /* ============================================================
@@ -326,24 +326,9 @@
       var mostrar = e.loop || e.fila || (recente && ['enviando', 'captcha', 'parado', 'concluido'].indexOf(e.est.st) !== -1);
       var el = document.getElementById('ork-amx-bolinha');
       if (!mostrar) { if (el) { el.remove(); } if (irEmSeg) { clearTimeout(irEmSeg); irEmSeg = null; } chaveAtual = ''; return; }
-      var r = rotulo(e);
+      // v253: bolinha visual REMOVIDA (a pedido). A lógica abaixo continua: com o loop ligado, abre o Combinado sozinho na hora da próxima volta.
+      if (el) { el.remove(); }
       var rest = e.prox > Date.now() ? e.prox - Date.now() : 0;
-      var cd = (rest > 0 && r.txt !== 'ENVIANDO') ? Math.floor(rest / 60000) + ':' + ('0' + Math.floor((rest % 60000) / 1000)).slice(-2) : '';
-      if (!el) {
-        el = document.createElement('div'); el.id = 'ork-amx-bolinha';
-        el.style.cssText = 'position:fixed;left:10px;bottom:96px;z-index:2147483647;width:62px;height:62px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff6b0,#e8ac0a 55%,#8a6d00);color:#141200;border:2px solid #141200;box-shadow:0 4px 12px rgba(0,0,0,.55);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;font:800 10px "Segoe UI",Arial,sans-serif;user-select:none';
-        el.addEventListener('click', function () { var u = localStorage.getItem('ork_amx_url'); if (u) { location.href = u; } });
-        document.body.appendChild(el);
-      }
-      var chave = r.txt + '|' + (e.fila ? e.fila.length : 0) + '|' + e.loop;
-      if (chave !== chaveAtual) {
-        chaveAtual = chave;
-        el.style.borderColor = r.cor;
-        el.innerHTML = '<span style="font-size:14px;line-height:1">🔁</span><span class="ork-amx-txt" style="font-size:9px;line-height:1.1;margin-top:1px">' + (r.txt || '') + '</span><span class="ork-amx-cd" style="font-size:9px;line-height:1.1"></span>';
-      }
-      el.querySelector('.ork-amx-cd').textContent = cd;
-      el.title = 'Atacar em massa — ' + (r.txt || 'loop') + (e.fila ? ' · demolidor com ' + e.fila.length + ' prédio(s)' : '') +
-        (rest > 0 ? ' · próxima volta às ' + new Date(e.prox).toLocaleTimeString('pt-BR').slice(0, 5) : '') + '. Clique pra abrir o Combinado.';
       if ((e.fila || e.loop) && !noCombinado() && e.url) {
         var atraso = e.fila ? 20000 : (rest > 0 ? rest : 20000);
         var alvo = Date.now() + atraso;
@@ -360,12 +345,24 @@
 
   var ORK_NOVIDADES = [
     {
+      id: '2026-11-24-v254',
+      data: '24/11/2026',
+      titulo: '⚡ N4 mais rápida e organizada',
+      itens: [
+        '⚔️ N4: o Recrutador usa o modelo de Ataque ou de Defesa exatamente como no Recrutador Hard, e repete a cada 30 s. Trocar Ataque/Defesa vale na hora.',
+        '🏛️ Recrutador Hard e Construtor Independente: "Repetir a cada" agora em min ou seg (mín. 10 s). Na N4 o construtor também roda a cada 30 s.',
+        '🪙 Cunhagem na N4 a cada 1:30 (o campo já vem com o último tempo usado). Pesquisa continua a cada 3 min.',
+        '⏳ Ligar a N4 liga o Rodar por vez: uma ferramenta por vez, sem pedidos juntos, e farm e noblagem passam na frente.'
+      ]
+    },
+    {
       id: '2026-11-23-v253',
       data: '23/11/2026',
-      titulo: '🛡️ Desvio automático e ajustes no KeyPress',
+      titulo: '🛡️ Desvio automático, KeyPress e bolinha removida',
       itens: [
         '🤖 Desviar Tropas: novo desvio automático — confere de tempos em tempos (seg ou min) e desvia sozinho as aldeias que estão sob ataque.',
-        '📈 KeyPress (aumentar o farm sozinho): agora o tempo pode ser em segundos ou minutos (mín. 1 min) e o explorador nunca é aumentado.'
+        '📈 KeyPress (aumentar o farm sozinho): agora o tempo pode ser em segundos ou minutos (mín. 1 min) e o explorador nunca é aumentado.',
+        '🔁 A bolinha "AGUARDA" do loop do Atacar em massa foi removida. O loop continua funcionando normalmente.'
       ]
     },
     {
@@ -4900,7 +4897,7 @@
           }, function (erro) { orkRedeFim(contouR, false); throw erro; });
           };
           // v182: espaça requisições de automação quando "Rodar por vez" está ligado
-          if (rpvLigado() && ehRequisicaoDeAutomacao(input)) { return orkEspacarReq().then(disparar); }
+          if (rpvLigado() && ehRequisicaoDeAutomacao(input)) { return orkEspacarReq(input).then(disparar); }
           return disparar();
         };
         disfarcarComoNativa(novoFetch, 'fetch');
@@ -4940,7 +4937,7 @@
           });
         } catch (e) {}
         // v182: espaça requisições de automação quando "Rodar por vez" está ligado (adia o envio, não trava)
-        if (rpvLigado() && ehRequisicaoDeAutomacao(urlReq)) { var _a = arguments; orkEspacarReq().then(function () { try { xhrSendOriginal.apply(xhr, _a); } catch (e) {} }); return; }
+        if (rpvLigado() && ehRequisicaoDeAutomacao(urlReq)) { var _a = arguments; orkEspacarReq(urlReq).then(function () { try { xhrSendOriginal.apply(xhr, _a); } catch (e) {} }); return; }
         return xhrSendOriginal.apply(xhr, arguments);
       };
 
@@ -9482,14 +9479,23 @@
   function gravarRpv(on) { try { localStorage.setItem(RPV_CHAVE, on ? '1' : '0'); } catch (e) {} }
   window.orkRpvLigado = rpvLigado;
   // (2) espaçador global de requisições — mínimo entre quaisquer duas (dobra com o FREIO)
-  var __ORK_REQ_PROX__ = 0;
+  // v254: duas filas — ALTA (farm, KeyPress, envio de tropas/noblagem) e NORMAL (o resto). A ALTA sempre sai primeiro;
+  // nunca saem 2 requisições juntas (intervalo mínimo entre quaisquer duas).
+  var __ORK_REQ_ULT__ = 0, __ORK_REQ_Q__ = { alta: [], normal: [] }, __ORK_REQ_BOMBA__ = false;
   function orkReqGap() { return window.__ORK_FREIO__ ? 650 : 300; } // ms: ~1,5/s com freio, ~3/s sem
-  function orkEspacarReq() {
+  function orkReqBombear() {
+    if (__ORK_REQ_BOMBA__) { return; }
+    var item = __ORK_REQ_Q__.alta.shift() || __ORK_REQ_Q__.normal.shift();
+    if (!item) { return; }
+    __ORK_REQ_BOMBA__ = true;
+    var espera = Math.max(0, __ORK_REQ_ULT__ + orkReqGap() - Date.now());
+    setTimeout(function () { __ORK_REQ_ULT__ = Date.now(); __ORK_REQ_BOMBA__ = false; try { item(); } catch (e) {} orkReqBombear(); }, espera);
+  }
+  function orkEspacarReq(alvo) {
     if (!rpvLigado()) { return Promise.resolve(); }
-    var agora = Date.now(), quando = Math.max(agora, __ORK_REQ_PROX__ || 0);
-    __ORK_REQ_PROX__ = quando + orkReqGap();
-    var faltam = quando - agora;
-    return faltam > 0 ? new Promise(function (r) { setTimeout(r, faltam); }) : Promise.resolve();
+    var u = ''; try { u = String(typeof alvo === 'string' ? alvo : (alvo && alvo.url) || '').toLowerCase(); } catch (e) {}
+    var alta = /am_farm|ajaxaction=farm|farm_from_report|screen=place|popup_command|ajax=confirm|ajax=command/.test(u);
+    return new Promise(function (resolve) { (alta ? __ORK_REQ_Q__.alta : __ORK_REQ_Q__.normal).push(resolve); orkReqBombear(); });
   }
   window.orkEspacarReq = orkEspacarReq;
   // (1) fila FIFO das ferramentas de ciclo (NÃO pausa o Farm — o espaçador cuida do ritmo de todos)
@@ -9509,7 +9515,9 @@
         }
         resolve(sair);
       }
-      if (!q.ocupado) { conceder(); } else { q.fila.push(conceder); }
+      if (!q.ocupado) { conceder(); }
+      else if (/^Nobl/.test(nome)) { var iNaoNobre = 0; while (iNaoNobre < q.fila.length && q.fila[iNaoNobre].__nobre) { iNaoNobre++; } conceder.__nobre = true; q.fila.splice(iNaoNobre, 0, conceder); } // v254: noblagem passa na frente
+      else { q.fila.push(conceder); }
     });
   }
 
@@ -9909,11 +9917,11 @@
           '<span>⚡ <b>Todas as páginas de uma vez</b> <span style="color:#888">— passa por todas num ciclo só (10 a 30s aleatórios entre cada página), depois espera o intervalo abaixo e repete.</span></span></label>' +
         '<div style="font-size:10.5px;color:#888;margin-bottom:6px">Repetir a cada:</div>' +
         '<div style="display:flex;gap:8px;margin-bottom:12px">' +
-          '<input id="ork-cunhar-valor" type="number" min="1" value="3" ' +
+          '<input id="ork-cunhar-valor" type="number" min="1" value="' + (function () { var ms = +lerConfigCunhar().intervaloMs || 180000; return ms % 60000 === 0 ? ms / 60000 : Math.round(ms / 1000); })() + '" ' +
             'style="flex:1;min-width:0;box-sizing:border-box;background:#111;border:1px solid #444;color:#eee;padding:8px 9px;border-radius:6px;font-size:12.5px">' +
           '<select id="ork-cunhar-unidade" style="flex:1;min-width:0;box-sizing:border-box;background:#111;border:1px solid #444;color:#eee;padding:8px 9px;border-radius:6px;font-size:12.5px">' +
-            '<option value="min" selected>minutos</option>' +
-            '<option value="seg">segundos</option>' +
+            '<option value="min"' + (((+lerConfigCunhar().intervaloMs || 180000) % 60000 === 0) ? ' selected' : '') + '>minutos</option>' +
+            '<option value="seg"' + (((+lerConfigCunhar().intervaloMs || 180000) % 60000 === 0) ? '' : ' selected') + '>segundos</option>' +
           '</select>' +
         '</div>' +
         '<div style="display:flex;gap:8px">' +
@@ -17844,7 +17852,7 @@
   function recChave() { return 'ork_recrutador_' + ((window.game_data && game_data.world) || ''); }
   function recRegraNova(g, nome) { return { grupo: g == null ? '0' : String(g), grupoNome: nome || 'Todas as aldeias', horas: { barracks: 4, stable: 4, garage: 2 }, filaUn: {}, pesos: {} }; }
   function recLer() {
-    var p = { ativo: false, regras: null, reserva: { wood: 0, stone: 0, iron: 0 }, intervalo: 30, porPedido: { barracks: 0, stable: 0, garage: 0 }, pedidosFila: 0, proximoEm: 0, ultimo: null };
+    var p = { ativo: false, regras: null, reserva: { wood: 0, stone: 0, iron: 0 }, intervalo: 30, intervaloUni: 'min', porPedido: { barracks: 0, stable: 0, garage: 0 }, pedidosFila: 0, proximoEm: 0, ultimo: null };
     try { var c = JSON.parse(localStorage.getItem(recChave()) || 'null'); if (c && typeof c === 'object') { for (var k in c) { p[k] = c[k]; } } } catch (e) {}
     // v151: regras por grupo (igual o Gerente). Formato antigo (1 grupo só) vira a regra 1.
     if (!Array.isArray(p.regras) || !p.regras.length) {
@@ -18004,8 +18012,8 @@
     if (simular) { return res; }
     var c2 = recLer();
     c2.ultimo = { quando: Date.now(), aldeias: res.aldeias, recrutou: res.recrutou, tropas: res.tropas, falhas: res.falhas, erro: res.erro };
-    var espera = Math.max(60000, (parseFloat(c2.intervalo) || 30) * 60000) + gerEntre(3000, 20000);
-    if (window.__ORK_FREIO__) { espera = Math.max(espera, 2 * (parseFloat(c2.intervalo) || 30) * 60000); }
+    var espera = recIntervaloMs(c2) + (c2.intervaloUni === 'seg' ? gerEntre(2000, 4000) : gerEntre(3000, 20000));
+    if (window.__ORK_FREIO__) { espera = Math.max(espera, 2 * recIntervaloMs(c2)); }
     if (!externo) { c2.proximoEm = Date.now() + espera; }
     recGravar(c2);
     recLog('ciclo: ' + res.recrutou.toLocaleString('pt-BR') + ' tropa(s) em ' + res.aldeias + ' de ' + res.total + ' aldeia(s)' + (res.falhas ? ', ' + res.falhas + ' falha(s)' : '') + (res.erro ? ' — ' + res.erro : '') + '.');
@@ -18013,6 +18021,8 @@
     if (c2.ativo && !externo) { recAgendar(); }
     return res;
   }
+  // v254: "Repetir a cada" em minutos OU segundos (mín. 1 min / 10 seg)
+  function recIntervaloMs(c) { var v = parseFloat(c.intervalo); if (!(v > 0)) { v = 30; } return c.intervaloUni === 'seg' ? Math.max(10, v) * 1000 : Math.max(1, v) * 60000; }
   function recAgendar() {
     var c = recLer(); if (!c.ativo) { return; }
     if (recTimer) { clearTimeout(recTimer); }
@@ -18110,7 +18120,7 @@
             '<div class="lin"><span data-dica="Máximo de tropas em CADA pedido de recrutamento, por prédio (Quartel, Estábulo, Oficina). Ex.: 1 = pedidos de 1 em 1. 0 = sem limite (padrão: 1 pedido com tudo).">📦 Tropas por pedido</span><span style="display:flex;gap:4px">' +
               ['barracks', 'stable', 'garage'].map(function (b) { return '<label style="display:flex;align-items:center;gap:2px" title="' + ({ barracks: 'Quartel', stable: 'Estábulo', garage: 'Oficina' })[b] + '"><img src="' + colImgBase() + 'buildings/' + b + '.png" style="width:16px;height:16px"><input type="text" inputmode="numeric" class="rec-pp" data-b="' + b + '" value="' + (+(c.porPedido || {})[b] || 0) + '" style="width:38px;text-align:center"></label>'; }).join('') + '</span></div>' +
             '<div class="lin"><span data-dica="Até quantos PEDIDOS de cada tropa podem ficar na fila do prédio. Ex.: 2 = no máximo 2 pedidos de Lanceiro esperando. 0 = sem limite (padrão). Junto com Tropas por pedido, ele manda vários pedidos pequenos até esse número.">🧾 Pedidos na fila (por tropa)</span><input type="text" inputmode="numeric" id="rec-pf" value="' + (+c.pedidosFila || 0) + '"></div>' +
-            '<div class="lin"><span data-dica="De quanto em quanto tempo ele passa de novo pelas aldeias (+ alguns segundos sorteados). Com o FREIO ligado, dobra. Na 24/7 ele roda 1 vez por ciclo, no lugar da sequência.">🔁 Repetir a cada (min)</span><input type="text" inputmode="decimal" id="rec-int" value="' + (+c.intervalo || 30) + '"></div>' +
+            '<div class="lin"><span data-dica="De quanto em quanto tempo ele passa de novo pelas aldeias (+ alguns segundos sorteados). Com o FREIO ligado, dobra. Na 24/7 ele roda 1 vez por ciclo, no lugar da sequência.">🔁 Repetir a cada</span><span style="display:flex;gap:5px;align-items:center"><input type="text" inputmode="decimal" id="rec-int" value="' + (+c.intervalo || 30) + '"><select id="rec-uni" style="background:#0d0d0d;border:1px solid #3a3a3a;color:#eee;border-radius:6px;padding:6px 4px;font-size:12px"><option value="min"' + (c.intervaloUni === 'seg' ? '' : ' selected') + '>min</option><option value="seg"' + (c.intervaloUni === 'seg' ? ' selected' : '') + '>seg</option></select></span></div>' +
           '</div>' +
           '<div class="msg" id="rec-msg">' + (ult.erro ? '<span style="color:#ffb347">⚠️ ' + gerHtml(ult.erro) + '</span>' : (ult.quando ? 'Última rodada às ' + new Date(ult.quando).toLocaleTimeString('pt-BR').slice(0, 5) + ' · ' + (ult.recrutou || 0).toLocaleString('pt-BR') + ' tropa(s) em ' + (ult.aldeias || 0) + ' aldeia(s)' + (ult.falhas ? ' · ' + ult.falhas + ' falha(s)' : '') : 'Dica: coloque quantas tropas de cada a aldeia deve TER no total (ex.: Lanceiro 1.000) e clique em Simular pra ver quanto ele faria (nada é recrutado).')) + '</div>' +
         '</div>' +
@@ -18167,7 +18177,8 @@
       var n = recLer();
       n.regras = JSON.parse(JSON.stringify(regras)); delete n.grupo; delete n.grupoNome; delete n.horas; delete n.pesos;
       ov.querySelectorAll('.rec-r').forEach(function (e) { n.reserva[e.getAttribute('data-k')] = Math.floor(num(e.value)); });
-      n.intervalo = Math.max(1, num(q('#rec-int').value) || 30);
+      n.intervaloUni = q('#rec-uni').value === 'seg' ? 'seg' : 'min';
+      n.intervalo = Math.max(n.intervaloUni === 'seg' ? 10 : 1, num(q('#rec-int').value) || 30);
       n.porPedido = {}; ov.querySelectorAll('.rec-pp').forEach(function (e) { n.porPedido[e.getAttribute('data-b')] = Math.max(0, Math.floor(num(e.value))); });
       n.pedidosFila = Math.max(0, Math.floor(num(q('#rec-pf').value)));
       return n;
@@ -18675,7 +18686,8 @@
     if (!/[?&]h=/.test(url)) { url += (url.indexOf('?') === -1 ? '?' : '&') + 'h=' + encodeURIComponent(csrf); }
     return url;
   }
-  async function pmExecutar(cfg, simular, mostrar) {
+  async function pmExecutar(cfg, simular, mostrar) { var _rpv = await orkFilaEntrar('Pesquisa', simular); try { return await pmExecutarInterno(cfg, simular, mostrar); } finally { _rpv(); } }
+  async function pmExecutarInterno(cfg, simular, mostrar) {
     pmRodando = true; pmParar = false;
     var res = { pesquisou: 0, recusou: 0, passadas: 0, porUn: {}, erro: '' };
     try {
@@ -20471,7 +20483,7 @@
   }
   window.orkCiFilaComGratis = ciFilaComGratis; window.orkCiFinalizarVer = ciFinalizarVer;
   function ciLer() {
-    var p = { ativo: false, modelos: null, regras: null, fila: 2, intervalo: 15, eMin: 0.5, eMax: 1.2, fazendaPct: 0, armazemPct: 0, missoes: false, recompensas: false, reduzir: false, reduzirMin: 60, reduzirMax: 3, finalizarGratis: false, desconto20: false, descontoNivel: 10, proximoEm: 0, ultimo: null };
+    var p = { ativo: false, modelos: null, regras: null, fila: 2, intervalo: 15, intervaloUni: 'min', eMin: 0.5, eMax: 1.2, fazendaPct: 0, armazemPct: 0, missoes: false, recompensas: false, reduzir: false, reduzirMin: 60, reduzirMax: 3, finalizarGratis: false, desconto20: false, descontoNivel: 10, proximoEm: 0, ultimo: null };
     try { var c = JSON.parse(localStorage.getItem(ciChave()) || 'null'); if (c && typeof c === 'object') { for (var k in c) { p[k] = c[k]; } } } catch (e) {}
     if (p.fazendaAuto === true && !p.fazendaPct) { p.fazendaPct = 10; } delete p.fazendaAuto;
     p.fazendaPct = Math.max(0, Math.min(90, parseFloat(p.fazendaPct) || 0));
@@ -20599,14 +20611,16 @@
     if (simular) { return res; }
     var c2 = ciLer();
     c2.ultimo = { quando: Date.now(), aldeias: res.aldeias, mandou: res.mandou, recusou: res.recusou, prontas: res.prontas, missoes: res.missoes || 0, recompensas: res.recompensas || 0, reduzidas: res.reduzidas || 0, desconto: res.desconto || 0, erro: res.erro };
-    var espera = Math.max(60000, (parseFloat(c2.intervalo) || 15) * 60000) + gerEntre(3000, 20000);
-    if (window.__ORK_FREIO__) { espera = Math.max(espera, 2 * (parseFloat(c2.intervalo) || 15) * 60000); }
+    var espera = ciIntervaloMs(c2) + (c2.intervaloUni === 'seg' ? gerEntre(2000, 4000) : gerEntre(3000, 20000));
+    if (window.__ORK_FREIO__) { espera = Math.max(espera, 2 * ciIntervaloMs(c2)); }
     if (!externo) { c2.proximoEm = Date.now() + espera; }
     ciGravar(c2);
     ciLog('ciclo: ' + res.mandou + ' ordem(ns) em ' + res.aldeias + ' aldeia(s)' + (res.recusou ? ', ' + res.recusou + ' recusada(s) (' + (res.ultimoErro || '') + ')' : '') + (res.prontas ? ', ' + res.prontas + ' aldeia(s) com o modelo completo' : '') + (res.erro ? ' — ' + res.erro : '') + '.');
     if (c2.ativo && !externo) { ciAgendar(); }
     return res;
   }
+  // v254: "Repetir a cada" em minutos OU segundos (mín. 1 min / 10 seg)
+  function ciIntervaloMs(c) { var v = parseFloat(c.intervalo); if (!(v > 0)) { v = 15; } return c.intervaloUni === 'seg' ? Math.max(10, v) * 1000 : Math.max(1, v) * 60000; }
   function ciAgendar() {
     var c = ciLer(); if (!c.ativo) { return; }
     if (ciTimer) { clearTimeout(ciTimer); }
@@ -20758,7 +20772,7 @@
           '<div class="card"><div class="tit"><em>3</em> Opções</div>' +
             '<div class="ops">' +
               '<label class="op" data-dica="Só manda ordem se a fila de construção da aldeia tiver menos que isso. Sem premium o jogo aceita 2; com Conta Premium, até 5."><span>🏗️ Máx. na fila</span><input type="text" inputmode="numeric" id="ci-fila" value="' + (+c.fila || 2) + '"></label>' +
-              '<label class="op" data-dica="De quanto em quanto tempo ele passa de novo pelas aldeias (+ alguns segundos sorteados). Com o FREIO ligado, dobra. Na 24/7 roda 1 vez por ciclo."><span>🔁 Repetir a cada (min)</span><input type="text" inputmode="decimal" id="ci-int" value="' + (+c.intervalo || 15) + '"></label>' +
+              '<label class="op" data-dica="De quanto em quanto tempo ele passa de novo pelas aldeias (+ alguns segundos sorteados). Com o FREIO ligado, dobra. Na 24/7 roda 1 vez por ciclo."><span>🔁 Repetir a cada</span><input type="text" inputmode="decimal" id="ci-int" value="' + (+c.intervalo || 15) + '"><select id="ci-uni" style="background:#0d0d0d;border:1px solid #3a3a3a;color:#eee;border-radius:6px;padding:6px 4px;font-size:12px;margin-left:5px"><option value="min"' + (c.intervaloUni === 'seg' ? '' : ' selected') + '>min</option><option value="seg"' + (c.intervaloUni === 'seg' ? ' selected' : '') + '>seg</option></select></label>' +
               '<label class="op" data-dica="Igual o Gerente: quando a aldeia tiver só essa % de população LIVRE (ou menos), sobe a Fazenda antes do modelo. Ex.: 10 ou 20. 0 = desligado (padrão)."><span>🌾 Fazenda se livre ≤ %</span><input type="text" inputmode="numeric" id="ci-fazpct" value="' + (+c.fazendaPct || 0) + '"></label>' +
               '<label class="op" data-dica="Quando algum recurso da aldeia (madeira, argila ou ferro) passar dessa % do armazém, sobe o Armazém antes do modelo (pra não perder produção). Ex.: 85. 0 = desligado (padrão)."><span>🏚️ Armazém se recurso ≥ %</span><input type="text" inputmode="numeric" id="ci-armpct" value="' + (+c.armazemPct || 0) + '"></label>' +
               '<label class="op" style="cursor:pointer" data-dica="GASTA PP. Desligado (padrão). Ligado: as construções são feitas com o botão -20% do jogo (20% menos recurso, paga em PP) — só a partir do nível escolhido ao lado. Se o jogo recusar por falta de PP, constrói normal e segue sem desconto naquela passada."><span>💎 Desconto -20% com PP <b style=\'font-size:8px;color:#e8ac0a\'>BETA</b></span><input type="checkbox" id="ci-desc" style="width:auto;flex:0 0 auto"' + (c.desconto20 ? ' checked' : '') + '></label>' +
@@ -20943,7 +20957,8 @@
       var n = ciLer();
       n.modelos = JSON.parse(JSON.stringify(modelos)); n.regras = JSON.parse(JSON.stringify(regras));
       n.fila = Math.max(1, Math.min(5, Math.floor(num(q('#ci-fila').value, 2))));
-      n.intervalo = Math.max(1, num(q('#ci-int').value, 15));
+      n.intervaloUni = q('#ci-uni').value === 'seg' ? 'seg' : 'min';
+      n.intervalo = Math.max(n.intervaloUni === 'seg' ? 10 : 1, num(q('#ci-int').value, 15));
       n.eMin = Math.max(0.2, num(q('#ci-emin').value, 0.5)); n.eMax = Math.max(n.eMin, num(q('#ci-emax').value, 1.2));
       n.fazendaPct = Math.max(0, Math.min(90, num(q('#ci-fazpct').value, 0)));
       n.armazemPct = Math.max(0, Math.min(100, num(q('#ci-armpct').value, 0)));
@@ -21929,7 +21944,15 @@
     set('fh_muralha_max', ''); set('fh_ritmo_humano', '0'); set('fh_prioriza_rica', '0');
     set('fh_saque_min', '8000'); set('fh_saque_min_on', '0'); set('fh_por_visita', '1'); set('fh_paginas', '1'); set('fh_uma_aba', '1');
   }
-  function n4RecCfg() { return n0RecCfg(n4Ler().recModo === 'def' ? 'def' : 'atk'); }
+  // v254: modelos EXATOS do Recrutador Hard (ataque e defesa), repetindo a cada 30 seg
+  function n4RecCfg() {
+    var def = n4Ler().recModo === 'def';
+    var pesos = def
+      ? { spear: 6000, sword: 3500, spy: 100, light: 2400, ram: 300 }
+      : { axe: 6000, spy: 50, light: 2800, ram: 300, catapult: 80 };
+    return { ativo: true, intervalo: 30, intervaloUni: 'seg', pedidosFila: 5, reserva: { wood: 0, stone: 0, iron: 0 }, porPedido: { barracks: 155, stable: 55, garage: 22 }, proximoEm: 0, ultimo: null,
+      regras: [{ grupo: '0', grupoNome: 'Todas as aldeias', horas: { barracks: 4, stable: 4, garage: 4 }, filaUn: { barracks: 'min', stable: 'min', garage: 'min' }, pesos: pesos }] };
+  }
   function n4ModeloGC() {
     var cod = ciLerCodigoGerente(N4_MODELO_GC);
     if (!cod || !cod.passos || !cod.passos.length) { return null; }
@@ -21942,7 +21965,7 @@
       if (mod) { pr = pr.concat([mod]); }
       if (pr.length) { c.modelos = pr; c.regras = [{ grupo: '0', grupoNome: 'Todas as aldeias', modelo: mod ? mod.id : pr[pr.length - 1].id }]; }
     } catch (e) {}
-    c.fila = 5; c.intervalo = 1; c.proximoEm = 0;
+    c.fila = 5; c.intervalo = 30; c.intervaloUni = 'seg'; c.proximoEm = 0;
     return c;
   }
   function n4ColetorPadrao() {
@@ -21959,7 +21982,7 @@
   }
   function n4CunharPadrao() {
     try { gravarRegrasCunhar({ max: 0, guardar: 0 }); } catch (e) {}
-    try { gravarConfigCunhar({ ativo: false, intervaloMs: 180000, foraAcad: false, formarNobres: true, modoPaginas: 'tudo', proximoEm: 0, grupo: '0', grupoNome: 'Todas as aldeias' }); } catch (e) {}
+    try { gravarConfigCunhar({ ativo: false, intervaloMs: 90000, foraAcad: false, formarNobres: true, modoPaginas: 'tudo', proximoEm: 0, grupo: '0', grupoNome: 'Todas as aldeias' }); } catch (e) {}
   }
   function n4NobCfg() {
     var c = nobLer();
@@ -22040,6 +22063,7 @@
     var c = n4Ler();
     window.orkAutoAssumir('n4');
     try { if (typeof gravarRpv === 'function') { gravarRpv(true); } } catch (e) {} // v245: espaça os comandos (farm não para, mas não sincroniza)
+    try { var bRpv = document.getElementById('ork-rpv-btn'); if (bRpv) { bRpv.textContent = '✓ Ligado'; bRpv.style.background = 'linear-gradient(100deg,#ffb800,#ffe36b)'; bRpv.style.color = '#1a1400'; } } catch (e) {} // v254: mostra o Rodar por vez ligado no topo do painel
     if (c.farm) { n4LigarFarm(); }
     if (c.rec) { try { recGravar(n4RecCfg()); recMostrarBolinha(); recRodarCiclo(); } catch (e) {} }
     if (c.ci) { try { var ci = n4CiCfg(); ci.ativo = true; ciGravar(ci); ciMostrarBolinha(); ciRodarCiclo(); } catch (e) {} }
@@ -22101,15 +22125,15 @@
       box.innerHTML =
         '<div class="hd" id="n4-hd"><span>⚡</span><span class="t">N4 — Conquistadores</span><span class="x" id="n4-x">✕</span></div>' +
         '<div class="bd">' +
-          '<div class="inst">⚡ Preset <b>automático</b>: farma, constrói (<b>modelo do GC</b>), recruta (<b>Ataque ou Defesa</b>), coleta, pesquisa a cada <b>3 min</b>, cunha e <b>nobla bárbaras sozinho</b>.' +
+          '<div class="inst">⚡ Preset <b>automático</b>: farma, constrói (<b>modelo do GC</b>), recruta (<b>Ataque ou Defesa</b>, a cada 30 s), coleta, pesquisa a cada <b>3 min</b>, cunha a cada <b>1:30</b> e <b>nobla bárbaras sozinho</b>. Roda <b>uma coisa por vez</b>, priorizando <b>farm e noblagem</b>.' +
             '<div class="l2">Ligue com <b>Cavalaria Leve</b> já em casa. Você só resolve o <b>captcha</b> quando aparecer. Dá pra ajustar cada ferramenta no ⚙.</div></div>' +
           '<button class="setar" id="n4-setar">⚡ Setar Configuração N4</button>' +
           '<div class="setsub">Setar = carrega o padrão (não começa). <b style="color:#9ad29a">▶ Ligar</b> embaixo começa a rodar.</div>' +
           '<div class="sec"><span class="n">1</span> FARM</div>' +
           linha('🚜', 'Farm Hard', '2x · 4 grupos · 1 aba', 'farm', 'farm') +
           '<div class="sec"><span class="n">2</span> CONSTRUIR / RECRUTAR</div>' +
-          linha('🏛️', 'Construtor Independente', 'modelo do GC · fila 5 · 1 min', 'ci', 'ci') +
-          linha('⚔️', 'Recrutador', 'Ataque ou Defesa (escolha abaixo)', 'rec', 'rec') + '<div class="row"><span class="ico">🎯</span><div class="nm">Modelo do Recrutador</div><div class="seg" id="n4-rm"><span class="' + (c.recModo === 'def' ? '' : 'sa') + '" data-rm="atk">Ataque</span><span class="' + (c.recModo === 'def' ? 'sd' : '') + '" data-rm="def">Defesa</span></div></div>' +
+          linha('🏛️', 'Construtor Independente', 'modelo do GC · fila 5 · a cada 30 s', 'ci', 'ci') +
+          linha('⚔️', 'Recrutador', 'Ataque ou Defesa (escolha abaixo) · a cada 30 s', 'rec', 'rec') + '<div class="row"><span class="ico">🎯</span><div class="nm">Modelo do Recrutador</div><div class="seg" id="n4-rm"><span class="' + (c.recModo === 'def' ? '' : 'sa') + '" data-rm="atk">Ataque</span><span class="' + (c.recModo === 'def' ? 'sd' : '') + '" data-rm="def">Defesa</span></div></div>' +
           linha('🧑‍💼', 'Gerente de Conta', 'modelos do jogo (Academia · FARM · Pesquisa) · todas · fila 5 · 1 min', 'ger', 'ger') +
           '<div class="sec"><span class="n">3</span> CONQUISTA</div>' +
           linha('👑', 'Noblar Automático', 'bárbaras · ciclo 22s', 'noblar', 'noblar') +
@@ -22117,13 +22141,13 @@
           '<div class="sec" style="color:#8a8a8a">EXTRAS <small>— rodam junto, espaçados</small></div>' +
           linha('⛏️', 'Coletor Hard', '1 min · raio 550', 'coletor', 'coletor') +
           linha('🔬', 'Pesquisar em Massa', 'todas as tropas · nível 1 · a cada 3 min', 'pesq', 'pesq') +
-          linha('🪙', 'Cunhagem', 'todas as páginas · guardar 0 · 3 min', 'cunhar', 'cunhar') +
+          linha('🪙', 'Cunhagem', 'todas as páginas · guardar 0 · a cada 1:30', 'cunhar', 'cunhar') +
           '<button class="ligar" id="n4-ligar">▶ Ligar N4</button>' +
           '<div class="ft"><button class="parar" id="n4-parar">⏸ Parar tudo</button><button class="fechar" id="n4-fechar">Fechar</button></div>' +
           '<div class="stt" id="n4-stt" style="color:' + (c.rodando ? '#58c47a' : '#8a8a8a') + '">' + (c.rodando ? '✔ Rodando · comandos espaçados' : '⏸ Parado — clique em ▶ Ligar pra começar') + '</div>' +
         '</div>';
       box.querySelectorAll('.pill[data-tog]').forEach(function (b) { var k = b.getAttribute('data-tog'); b.classList.toggle('on', !!c[k]); b.textContent = c[k] ? '✓ Ligado' : 'Desligado'; b.addEventListener('click', function () { var n = n4Ler(); n[k] = !n[k]; n4Gravar(n); desenhar(); }); });
-      box.querySelectorAll('[data-rm]').forEach(function (s) { s.addEventListener('click', function () { var n = n4Ler(); n.recModo = s.getAttribute('data-rm') === 'def' ? 'def' : 'atk'; n4Gravar(n); desenhar(); }); });
+      box.querySelectorAll('[data-rm]').forEach(function (s) { s.addEventListener('click', function () { var n = n4Ler(); n.recModo = s.getAttribute('data-rm') === 'def' ? 'def' : 'atk'; n4Gravar(n); if (n.rodando && n.rec) { try { recGravar(n4RecCfg()); recRodarCiclo(); } catch (e) {} } desenhar(); }); });
       box.querySelectorAll('.cfg[data-cfg]').forEach(function (g) { g.addEventListener('click', function () { n4AbrirFerramenta(g.getAttribute('data-cfg')); }); });
       box.querySelector('#n4-x').addEventListener('click', function () { ov.remove(); });
       box.querySelector('#n4-fechar').addEventListener('click', function () { ov.remove(); });
